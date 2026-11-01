@@ -1,1 +1,18 @@
-{"name":"LocalCricket","short_name":"LocalCricket","start_url":"./","scope":"./","display":"standalone","background_color":"#0b1220","theme_color":"#101827","description":"Offline cricket scorecard and live scoring app","icons":[{"src":"icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}
+{
+  "name": "LocalCricket \u2013 Offline Score Manager",
+  "short_name": "LocalCricket",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f3f6f3",
+  "theme_color": "#0b3b2e",
+  "description": "Personal offline cricket team and scorecard manager",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

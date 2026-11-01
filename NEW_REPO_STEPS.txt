@@ -1,0 +1,13 @@
+NEW REPOSITORY STEPS
+
+1. Create a NEW GitHub repository. Suggested name: LocalCricket-Fresh
+2. Upload the six app files directly into the repository root.
+3. Settings > Pages > Build and deployment:
+   - Source: Deploy from a branch
+   - Branch: main
+   - Folder: / (root)
+   - Save
+4. Wait for the Pages URL to appear.
+5. Open the URL in Chrome on Android > menu > Add to Home screen / Install app.
+
+Keep the old repository unchanged as a backup.
