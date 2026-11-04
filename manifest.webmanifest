@@ -1,12 +1,13 @@
 {
-  "name": "LocalCricket \u2013 Offline Score Manager",
-  "short_name": "LocalCricket",
-  "start_url": "./",
+  "name": "CricScorer 2.0 - Offline Cricket Manager",
+  "short_name": "CricScorer",
+  "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#f3f6f3",
+  "background_color": "#06110d",
   "theme_color": "#0b3b2e",
-  "description": "Personal offline cricket team and scorecard manager",
+  "orientation": "portrait",
+  "description": "Professional offline-first cricket scorecard and tournament manager",
   "icons": [
     {
       "src": "icon.svg",

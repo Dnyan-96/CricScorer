@@ -1,28 +1,414 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0b3b2e"><meta name="description" content="Offline local cricket team and scorecard manager">
-<link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icon.svg">
-<title>CricScorer</title><link rel="stylesheet" href="styles.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#0b3b2e">
+  <meta name="description" content="CricScorer 2.0 - Professional Offline Cricket Scoring & Scorecard Manager">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="CricScorer">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <title>CricScorer 2.0</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
-<body>
-<header class="top"><div><div class="brand">🏏 CricScorer</div><small>Personal cricket manager · Offline</small></div><button id="installBtn" class="outline hidden">Install</button></header>
-<nav class="tabs">
-<button data-tab="dashboard" class="active">Home</button><button data-tab="teams">Teams</button><button data-tab="players">Players</button><button data-tab="matches">Matches</button><button data-tab="backup">Backup</button>
-</nav>
-<main>
-<section id="dashboard" class="page active">
-<div class="hero"><p class="eyebrow">YOUR CRICKET, YOUR RECORDS</p><h1>Manage every match.<br>Remember every run.</h1><p>Everything stays on this device. No account or internet required.</p><div class="actions"><button class="primary" data-go="teams">＋ Create team</button><button class="light" data-go="matches">＋ New match</button></div></div>
-<div class="stats"><article><strong id="teamCount">0</strong><span>Teams</span></article><article><strong id="playerCount">0</strong><span>Players</span></article><article><strong id="matchCount">0</strong><span>Matches</span></article><article><strong id="winCount">0</strong><span>Wins</span></article></div>
-<h2>Recent matches</h2><div id="recentMatches" class="stack empty">Your completed matches will appear here.</div>
-</section>
-<section id="teams" class="page"><div class="section-head"><div><p class="eyebrow">SQUADS</p><h1>My teams</h1></div><button class="primary" id="addTeam">＋ Team</button></div><div id="teamList" class="stack empty">No teams yet. Create your first team.</div></section>
-<section id="players" class="page"><div class="section-head"><div><p class="eyebrow">PLAYER DIRECTORY</p><h1>Players</h1></div><button class="primary" id="addPlayer">＋ Player</button></div><div id="playerList" class="stack empty">Add players to your teams.</div></section>
-<section id="matches" class="page"><div class="section-head"><div><p class="eyebrow">FIXTURES & RESULTS</p><h1>Matches</h1></div><button class="primary" id="addMatch">＋ Match</button></div><div id="matchList" class="stack empty">No matches created yet.</div></section>
-<section id="backup" class="page"><p class="eyebrow">YOUR DATA, YOUR DEVICE</p><h1>Backup & restore</h1><div class="panel"><h3>Export all data</h3><p>Save teams, players, matches and score events to a JSON backup file.</p><button class="primary" id="exportBtn">Download backup</button></div><div class="panel"><h3>Restore backup</h3><p>Choose a LocalCricket JSON backup. Existing data will be replaced.</p><input type="file" id="importFile" accept="application/json,.json"><button class="secondary" id="importBtn">Restore backup</button></div><div class="panel danger"><h3>Delete all local data</h3><p>This cannot be undone. Export a backup first.</p><button class="dangerBtn" id="clearBtn">Delete everything</button></div><p class="muted" id="storageNote">Data is stored locally in this browser on this device.</p></section>
-</main>
-<dialog id="modal"><form method="dialog" id="modalForm"><div class="modal-head"><h2 id="modalTitle">Add</h2><button class="x" value="cancel" aria-label="Close">×</button></div><div id="modalBody"></div><div class="modal-actions"><button class="secondary" value="cancel">Cancel</button><button class="primary" id="modalSave" value="default">Save</button></div></form></dialog>
-<div id="toast" role="status"></div>
-<script src="app.js"></script>
-</body></html>
+<body data-theme="dark">
+  <!-- Top Navigation & Header -->
+  <header class="top-nav">
+    <div class="brand-cluster">
+      <div class="brand-logo">🏏</div>
+      <div>
+        <div class="brand-name">Cric<span>Scorer</span> <span class="v-badge">2.0</span></div>
+        <small class="brand-tag">Offline-First Score Engine</small>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button id="themeToggleBtn" class="icon-btn" title="Toggle Light/Dark Theme" aria-label="Toggle theme">🌓</button>
+      <button id="installAppBtn" class="pill-btn hidden">Install</button>
+    </div>
+  </header>
+
+  <!-- Main Content Container with 9 Distinct Views -->
+  <main id="mainApp">
+    <!-- VIEW 1: DASHBOARD -->
+    <section id="dashboard" class="page active">
+      <div class="hero-banner">
+        <p class="eyebrow">MATCH CENTER & SUMMARY</p>
+        <h1>Every Match.<br>Every Ball Recorded.</h1>
+        <p class="hero-desc">Offline storage with IndexedDB. No accounts, no cloud dependencies.</p>
+        <div class="quick-cta-row">
+          <button class="btn btn-primary" onclick="navigate('create-match')">＋ New Match</button>
+          <button class="btn btn-secondary" onclick="navigate('teams')">Manage Teams</button>
+          <button class="btn btn-outline" onclick="resumeLatestLiveMatch()">Resume Live</button>
+        </div>
+      </div>
+
+      <div class="stats-counter-grid">
+        <article class="stat-card">
+          <strong id="statTotalMatches">0</strong>
+          <span>Total Matches</span>
+        </article>
+        <article class="stat-card">
+          <strong id="statLiveMatches" class="text-live">0</strong>
+          <span>Live Matches</span>
+        </article>
+        <article class="stat-card">
+          <strong id="statCompletedMatches">0</strong>
+          <span>Completed</span>
+        </article>
+        <article class="stat-card">
+          <strong id="statTotalTeams">0</strong>
+          <span>Teams</span>
+        </article>
+        <article class="stat-card">
+          <strong id="statTotalPlayers">0</strong>
+          <span>Players</span>
+        </article>
+      </div>
+
+      <div class="section-title-row">
+        <h2>Live & Recent Action</h2>
+        <button class="link-btn" onclick="navigate('history')">View all matches →</button>
+      </div>
+      <div id="dashboardMatchesList" class="stack-list empty-state">No match records found.</div>
+
+      <div class="section-title-row" style="margin-top:20px;">
+        <h2>Top Performers</h2>
+        <button class="link-btn" onclick="navigate('statistics')">Full stats →</button>
+      </div>
+      <div class="two-col-grid" id="dashboardTopPerformers">
+        <div class="card mini-card">
+          <h3>🏏 Top Run Scorers</h3>
+          <div id="dashTopBatters" class="mini-list"><span class="muted">No batting data yet.</span></div>
+        </div>
+        <div class="card mini-card">
+          <h3>⚡ Top Wicket Takers</h3>
+          <div id="dashTopBowlers" class="mini-list"><span class="muted">No bowling data yet.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 2: LIVE MATCH SCORER -->
+    <section id="live-scorer" class="page">
+      <div id="liveScorerContainer">
+        <!-- Rendered dynamically by app.js -->
+        <div class="empty-state">No active match selected. Start or resume a match from the Matches tab.</div>
+      </div>
+    </section>
+
+    <!-- VIEW 3: CREATE MATCH -->
+    <section id="create-match" class="page">
+      <div class="page-header">
+        <div>
+          <p class="eyebrow">FIXTURE CONFIGURATION</p>
+          <h1>Create Match</h1>
+        </div>
+      </div>
+
+      <div class="card form-card">
+        <form id="createMatchForm" onsubmit="handleCreateMatchSubmit(event)">
+          <div class="field-grid">
+            <div class="form-group col-full">
+              <label>Match Title</label>
+              <input type="text" id="cmTitle" required placeholder="e.g. League Semi-Final / Weekend T20">
+            </div>
+
+            <div class="form-group">
+              <label>Match Format</label>
+              <select id="cmFormat" onchange="onFormatChange(this.value)">
+                <option value="T20" selected>T20 (20 Overs)</option>
+                <option value="T10">T10 (10 Overs)</option>
+                <option value="ODI">ODI (50 Overs)</option>
+                <option value="Test">Test Match (2 Innings)</option>
+                <option value="Custom">Custom Overs</option>
+              </select>
+            </div>
+
+            <div class="form-group" id="cmOversGroup">
+              <label>Number of Overs per Innings</label>
+              <input type="number" id="cmOvers" min="1" max="100" value="20" required>
+            </div>
+
+            <div class="form-group">
+              <label>Team A (Home)</label>
+              <select id="cmTeamA" required onchange="updateTeamDropdowns()"></select>
+            </div>
+
+            <div class="form-group">
+              <label>Team B (Away)</label>
+              <select id="cmTeamB" required></select>
+            </div>
+
+            <div class="form-group">
+              <label>Toss Won By</label>
+              <select id="cmTossWinner" required>
+                <option value="teamA">Team A</option>
+                <option value="teamB">Team B</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>Elected To</label>
+              <select id="cmTossDecision" required>
+                <option value="bat" selected>Bat First</option>
+                <option value="bowl">Bowl First</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>Match Date</label>
+              <input type="date" id="cmDate" required>
+            </div>
+
+            <div class="form-group">
+              <label>Venue / Ground</label>
+              <input type="text" id="cmVenue" placeholder="e.g. Oval Sports Ground">
+            </div>
+          </div>
+
+          <div class="squad-selection-panel" id="squadSelectionBox" style="margin-top: 15px;">
+            <h3>Playing Squad Selection</h3>
+            <p class="muted" style="margin-bottom:10px;">Select at least 2 players for each team to enable ball-by-ball scoring.</p>
+            <div class="two-col-grid">
+              <div class="card squad-picker" id="squadPickerA">
+                <h4>Team A Squad</h4>
+                <div class="squad-checklist" id="squadListA"></div>
+              </div>
+              <div class="card squad-picker" id="squadPickerB">
+                <h4>Team B Squad</h4>
+                <div class="squad-checklist" id="squadListB"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-actions" style="margin-top:20px;">
+            <button type="submit" class="btn btn-primary btn-block">Start Live Match 🏏</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- VIEW 4: TEAMS -->
+    <section id="teams" class="page">
+      <div class="page-header">
+        <div>
+          <p class="eyebrow">ROSTER DIRECTORY</p>
+          <h1>Teams</h1>
+        </div>
+        <button class="btn btn-primary" onclick="openTeamModal()">＋ Add Team</button>
+      </div>
+      <div id="teamsContainer" class="stack-list empty-state">No teams found. Create your first team.</div>
+    </section>
+
+    <!-- VIEW 5: PLAYERS -->
+    <section id="players" class="page">
+      <div class="page-header">
+        <div>
+          <p class="eyebrow">PLAYER REGISTRY</p>
+          <h1>Players</h1>
+        </div>
+        <button class="btn btn-primary" onclick="openPlayerModal()">＋ Add Player</button>
+      </div>
+      <div class="filter-bar">
+        <input type="text" id="playerSearchInput" placeholder="Search by player name..." oninput="renderPlayers()">
+        <select id="playerTeamFilter" onchange="renderPlayers()">
+          <option value="">All Teams</option>
+        </select>
+      </div>
+      <div id="playersContainer" class="stack-list empty-state">No players added yet.</div>
+    </section>
+
+    <!-- VIEW 6: MATCH HISTORY -->
+    <section id="history" class="page">
+      <div class="page-header">
+        <div>
+          <p class="eyebrow">ARCHIVE & RESULTS</p>
+          <h1>Match History</h1>
+        </div>
+      </div>
+      <div class="filter-bar">
+        <input type="text" id="historySearchInput" placeholder="Search title, venue, or team..." oninput="renderHistory()">
+        <select id="historyStatusFilter" onchange="renderHistory()">
+          <option value="">All Statuses</option>
+          <option value="Live">Live</option>
+          <option value="Completed">Completed</option>
+          <option value="Upcoming">Upcoming</option>
+          <option value="Abandoned">Abandoned</option>
+        </select>
+      </div>
+      <div id="historyMatchesContainer" class="stack-list empty-state">No matches in history.</div>
+    </section>
+
+    <!-- VIEW 7: STATISTICS -->
+    <section id="statistics" class="page">
+      <div class="page-header">
+        <div>
+          <p class="eyebrow">RECORDS & CAREER FIGURES</p>
+          <h1>Player Statistics</h1>
+        </div>
+        <button class="btn btn-secondary" onclick="exportStatsCSV()">Export Stats (CSV)</button>
+      </div>
+
+      <div class="card" style="margin-bottom:15px;">
+        <div class="filter-bar" style="margin:0;">
+          <select id="statsFormatFilter" onchange="renderStatistics()">
+            <option value="">All Formats</option>
+            <option value="T20">T20</option>
+            <option value="T10">T10</option>
+            <option value="ODI">ODI</option>
+            <option value="Test">Test</option>
+            <option value="Custom">Custom</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="stats-tabs">
+        <button class="tab-chip active" id="btnStatsBatting" onclick="switchStatsTab('batting')">Batting Records</button>
+        <button class="tab-chip" id="btnStatsBowling" onclick="switchStatsTab('bowling')">Bowling Records</button>
+        <button class="tab-chip" id="btnStatsFielding" onclick="switchStatsTab('fielding')">Fielding Records</button>
+      </div>
+
+      <div class="card table-card" id="statsTableContainer" style="overflow-x:auto;">
+        <!-- Rendered dynamically -->
+      </div>
+    </section>
+
+    <!-- VIEW 8: SETTINGS -->
+    <section id="settings" class="page">
+      <div class="page-header">
+        <div>
+          <p class="eyebrow">PREFERENCES & AUDIT</p>
+          <h1>Settings</h1>
+        </div>
+      </div>
+
+      <div class="card settings-card">
+        <h3>Theme & Display</h3>
+        <div class="setting-item">
+          <div>
+            <strong>Color Theme</strong>
+            <p class="muted">Switch between high-contrast dark green or crisp light mode.</p>
+          </div>
+          <button class="btn btn-secondary" onclick="toggleTheme()">Toggle Theme</button>
+        </div>
+
+        <div class="setting-item">
+          <div>
+            <strong>Default Match Format</strong>
+            <p class="muted">Preferred format pre-selected in Match Creation.</p>
+          </div>
+          <select id="settingDefaultFormat" onchange="saveAppSetting('defaultFormat', this.value)">
+            <option value="T20">T20</option>
+            <option value="T10">T10</option>
+            <option value="ODI">ODI</option>
+            <option value="Test">Test</option>
+            <option value="Custom">Custom</option>
+          </select>
+        </div>
+
+        <div class="setting-item">
+          <div>
+            <strong>Auditing & Storage Engine</strong>
+            <p class="muted">Native IndexedDB: <code>LocalCricketDB</code> (v2). 100% offline.</p>
+          </div>
+          <span class="badge badge-success">Active & Healthy</span>
+        </div>
+
+        <div class="setting-item">
+          <div>
+            <strong>Storage Quota Inspection</strong>
+            <p class="muted" id="storageQuotaLabel">Calculating storage...</p>
+          </div>
+          <button class="btn btn-secondary" onclick="inspectStorageQuota()">Check Quota</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 9: BACKUP & RESTORE -->
+    <section id="backup" class="page">
+      <div class="page-header">
+        <div>
+          <p class="eyebrow">DATA INDEPENDENCE</p>
+          <h1>Backup & Restore</h1>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Export Complete Database Backup</h3>
+        <p class="muted">Exports all teams, players, matches, deliveries, and settings as a versioned JSON file.</p>
+        <button class="btn btn-primary" onclick="exportFullDatabaseJSON()">Download Full JSON Backup</button>
+      </div>
+
+      <div class="card" style="margin-top:15px;">
+        <h3>Restore from Backup</h3>
+        <p class="muted">Supports backups from both CricScorer 2.0 and CricScorer 1.0 (LocalCricket).</p>
+        <input type="file" id="importFileInput" accept="application/json,.json" style="display:none;" onchange="handleBackupFileSelect(event)">
+        <button class="btn btn-secondary" onclick="document.getElementById('importFileInput').click()">Select Backup File & Restore</button>
+      </div>
+
+      <div class="card danger-card" style="margin-top:20px;">
+        <h3>Permanent Reset</h3>
+        <p class="muted">Permanently wipes all local tables in IndexedDB. Use with extreme caution.</p>
+        <button class="btn btn-danger" onclick="confirmWipeAllData()">Delete All Local Data</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- Bottom Mobile Navigation Bar -->
+  <nav class="bottom-nav">
+    <button class="nav-item active" data-nav="dashboard" onclick="navigate('dashboard')">
+      <span class="nav-icon">📊</span>
+      <span class="nav-text">Home</span>
+    </button>
+    <button class="nav-item" data-nav="live-scorer" onclick="navigate('live-scorer')">
+      <span class="nav-icon">⚡</span>
+      <span class="nav-text">Scorer</span>
+    </button>
+    <button class="nav-item" data-nav="create-match" onclick="navigate('create-match')">
+      <span class="nav-icon">＋</span>
+      <span class="nav-text">New</span>
+    </button>
+    <button class="nav-item" data-nav="teams" onclick="navigate('teams')">
+      <span class="nav-icon">🛡️</span>
+      <span class="nav-text">Teams</span>
+    </button>
+    <button class="nav-item" data-nav="players" onclick="navigate('players')">
+      <span class="nav-icon">👤</span>
+      <span class="nav-text">Players</span>
+    </button>
+    <button class="nav-item" data-nav="history" onclick="navigate('history')">
+      <span class="nav-icon">📜</span>
+      <span class="nav-text">History</span>
+    </button>
+    <button class="nav-item" data-nav="statistics" onclick="navigate('statistics')">
+      <span class="nav-icon">📈</span>
+      <span class="nav-text">Stats</span>
+    </button>
+    <button class="nav-item" data-nav="settings" onclick="navigate('settings')">
+      <span class="nav-icon">⚙️</span>
+      <span class="nav-text">Settings</span>
+    </button>
+  </nav>
+
+  <!-- Universal Modal Dialog for Forms & Scorecards -->
+  <dialog id="appModal">
+    <div class="modal-wrapper">
+      <div class="modal-header">
+        <h2 id="modalTitle">Title</h2>
+        <button class="modal-close" onclick="closeModal()" aria-label="Close">×</button>
+      </div>
+      <div id="modalBody" class="modal-content"></div>
+      <div id="modalFooter" class="modal-footer"></div>
+    </div>
+  </dialog>
+
+  <!-- Toast Notification Container -->
+  <div id="toastNotification" role="alert"></div>
+
+  <!-- Pure Native Application Logic -->
+  <script src="app.js"></script>
+</body>
+</html>

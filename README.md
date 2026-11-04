@@ -1,35 +1,46 @@
-# LocalCricket — Fresh GitHub Pages project
+# CricScorer 2.0 🏏
 
-A static, installable cricket team and match manager. It uses IndexedDB in the browser; there is no backend, account, or cloud database.
+**Professional Offline-First Cricket Scoring & Scorecard Management PWA**
 
-## Files to upload
-Upload the six files in this folder directly to the **root** of a new GitHub repository:
-- `index.html`
-- `styles.css`
-- `app.js`
-- `manifest.webmanifest`
-- `sw.js`
-- `icon.svg`
+Production-grade upgrade from v1 (`LocalCricket`) to v2.0, preserving all existing user teams, players, and match records while delivering a complete mobile scoring engine.
 
-## Publish with GitHub Pages (Android-friendly)
-1. Create a new public repository, for example `LocalCricket-Fresh`.
-2. Upload the six files above to the repository root (not inside another folder).
-3. Open **Settings → Pages**.
-4. Under **Build and deployment**, select **Deploy from a branch**.
-5. Select branch `main` and folder `/ (root)`, then Save.
-6. Wait for the Pages deployment to finish. Open the published URL in Chrome on Android.
-7. In Chrome, open the three-dot menu and choose **Add to Home screen** or **Install app**.
+---
 
-## Important data note
-Match data is stored only in the browser on the device that entered it. Use the app's Backup & restore page to download a JSON backup regularly. Clearing browser site data or changing to a different site URL can make locally stored data unavailable.
+## ⚡ Core Features in v2.0
 
-## Current features
-- Create and manage teams and players.
-- Create fixtures and match records.
-- Live ball entry with batter, non-striker, bowler, runs, extras and dismissal selection.
-- Automatic score, wickets, legal-ball count, overs and run rate.
-- Manual strike swap and undo last delivery.
-- Basic batting and bowling figures and scorecard view.
-- Local JSON backup and restore.
+1. **Safe Database Migration:**
+   - Automatically migrates existing records from `LocalCricketDB` v1 to v2.
+   - Zero data loss: Preserves all historical teams, players, and fixtures.
+2. **Deterministic Cricket Scoring Engine:**
+   - 100% decoupled from the UI.
+   - Real-time event sourcing replay for batting strike rates, bowling economies, maidens, and fall of wickets.
+   - Handles all **12 dismissal types** (Bowled, Caught, LBW, Stumped, Run Out, Hit Wicket, Retired Hurt, etc.).
+   - Accurate extras accounting (Wides, No-Balls, Byes, Leg-Byes, Penalty runs).
+   - Automatic striker rotation on odd runs, over completions, and wickets.
+3. **9 Complete Navigation Sections:**
+   - **Dashboard:** Live match alerts, stat cards, top run scorers, top wicket takers.
+   - **Live Scorer:** One-hand ergonomic mobile keypad (0-6, extras, dismissals, swap strike, change bowler, undo).
+   - **Create Match:** T20, T10, ODI, Test, and Custom match configurations with Playing Squad selectors.
+   - **Teams:** Roster directory, home grounds, and player counts.
+   - **Players:** Complete player registry with batting & bowling styles.
+   - **Match History:** Full search, filter, and detailed modal scorecards.
+   - **Statistics:** Career leaderboards (Batting, Bowling, Fielding) with CSV export.
+   - **Settings:** Dark/Light theme toggle, default match format, and IndexedDB storage inspector.
+   - **Backup & Restore:** Full versioned JSON backup and restoration.
 
-This is a fresh static web package. Test a sample match and backup/restore before using it for official scoring. Cricket edge cases (for example, complex run-out/no-ball combinations and detailed bowling figures) should be validated against your scoring rules.
+---
+
+## 🚀 How to Deploy on GitHub Pages from Android
+
+1. Open your GitHub account on your mobile browser (or computer) and go to your repository.
+2. Upload the files:
+   - `index.html`
+   - `styles.css`
+   - `app.js`
+   - `manifest.webmanifest`
+   - `sw.js`
+   - `icon.svg`
+3. Go to **Settings** → **Pages**.
+4. Under **Branch**, select `main` and root folder `/`, then click **Save**.
+5. Once deployed, open the live link in **Google Chrome** on Android.
+6. Tap the Chrome three-dot menu (⋮) → **Install app** or **Add to Home screen**.
