@@ -26,7 +26,7 @@
       </div>
     </div>
     <div class="header-actions">
-      <button id="themeToggleBtn" class="icon-btn" title="Toggle Light/Dark Theme" aria-label="Toggle theme">🌓</button>
+      <button id="themeToggleBtn" class="icon-btn" onclick="toggleTheme()" title="Toggle Light/Dark Theme" aria-label="Toggle theme">🌓</button>
       <button id="installAppBtn" class="pill-btn hidden">Install</button>
     </div>
   </header>
@@ -41,7 +41,8 @@
         <p class="hero-desc">Offline storage with IndexedDB. No accounts, no cloud dependencies.</p>
         <div class="quick-cta-row">
           <button class="btn btn-primary" onclick="navigate('create-match')">＋ New Match</button>
-          <button class="btn btn-secondary" onclick="navigate('teams')">Manage Teams</button>
+          <button class="btn btn-secondary" onclick="openTeamModal()">＋ Add Team</button>
+          <button class="btn btn-secondary" onclick="openPlayerModal()">＋ Add Player</button>
           <button class="btn btn-outline" onclick="resumeLatestLiveMatch()">Resume Live</button>
         </div>
       </div>

@@ -420,45 +420,52 @@ async function renderTeams() {
 }
 
 async function openTeamModal(teamId = null) {
+  if (!db) await openDatabase();
   const teams = await dbGetAll('teams');
   const team = teamId ? teams.find(t => t.id === teamId) : null;
 
   const html = `
-    <form id="teamForm">
+    <form id="teamForm" onsubmit="event.preventDefault();">
       <div class="form-group" style="margin-bottom:12px;">
         <label>Team Name *</label>
-        <input type="text" name="name" required value="${escapeHTML(team?.name || '')}" placeholder="e.g. Royal Challengers">
+        <input type="text" id="tName" name="name" required value="${escapeHTML(team?.name || '')}" placeholder="e.g. Royal Challengers">
       </div>
       <div class="form-group" style="margin-bottom:12px;">
         <label>Home City / Ground</label>
-        <input type="text" name="location" value="${escapeHTML(team?.location || '')}" placeholder="e.g. Bengaluru">
+        <input type="text" id="tLocation" name="location" value="${escapeHTML(team?.location || '')}" placeholder="e.g. Bengaluru">
       </div>
       <div class="form-group">
         <label>Short Code</label>
-        <input type="text" name="shortName" maxlength="4" value="${escapeHTML(team?.shortName || '')}" placeholder="e.g. RCB">
+        <input type="text" id="tShortName" name="shortName" maxlength="4" value="${escapeHTML(team?.shortName || '')}" placeholder="e.g. RCB">
       </div>
     </form>
   `;
 
   openModal(team ? 'Edit Team' : 'Add Team', html, async () => {
-    const f = document.getElementById('teamForm');
-    if (!f.reportValidity()) return false;
-    const data = Object.fromEntries(new FormData(f).entries());
+    const name = document.getElementById('tName').value.trim();
+    const location = document.getElementById('tLocation').value.trim();
+    const shortName = document.getElementById('tShortName').value.trim();
+
+    if (!name) {
+      showToast('Please enter a team name');
+      return false;
+    }
 
     if (team) {
-      await dbPut('teams', { ...team, ...data });
+      await dbPut('teams', { ...team, name, location, shortName });
       showToast('Team updated successfully');
     } else {
       await dbPut('teams', {
         id: generateId(),
-        name: data.name,
-        location: data.location || '',
-        shortName: data.shortName || '',
+        name,
+        location,
+        shortName,
         created: new Date().toISOString()
       });
       showToast('New team created');
     }
     renderTeams();
+    renderDashboard();
     return true;
   });
 }
@@ -528,10 +535,11 @@ async function renderPlayers() {
 }
 
 async function openPlayerModal(playerId = null) {
+  if (!db) await openDatabase();
   const [players, teams] = await Promise.all([dbGetAll('players'), dbGetAll('teams')]);
   if (!teams.length) {
-    alert('Please create at least one team first.');
-    navigate('teams');
+    showToast('Please create a team first.');
+    openTeamModal();
     return;
   }
 
@@ -539,18 +547,18 @@ async function openPlayerModal(playerId = null) {
   const teamOpts = teams.map(t => `<option value="${t.id}" ${p && p.teamId === t.id ? 'selected' : ''}>${escapeHTML(t.name)}</option>`).join('');
 
   const html = `
-    <form id="playerForm">
+    <form id="playerForm" onsubmit="event.preventDefault();">
       <div class="form-group" style="margin-bottom:12px;">
         <label>Player Full Name *</label>
-        <input type="text" name="name" required value="${escapeHTML(p?.name || '')}" placeholder="e.g. Virat Kohli">
+        <input type="text" id="pName" name="name" required value="${escapeHTML(p?.name || '')}" placeholder="e.g. Virat Kohli">
       </div>
       <div class="form-group" style="margin-bottom:12px;">
         <label>Assign Team *</label>
-        <select name="teamId" required>${teamOpts}</select>
+        <select id="pTeamId" name="teamId" required>${teamOpts}</select>
       </div>
       <div class="form-group" style="margin-bottom:12px;">
         <label>Role</label>
-        <select name="role">
+        <select id="pRole" name="role">
           <option value="Batter" ${p?.role === 'Batter' ? 'selected' : ''}>Batter</option>
           <option value="Bowler" ${p?.role === 'Bowler' ? 'selected' : ''}>Bowler</option>
           <option value="All-Rounder" ${p?.role === 'All-Rounder' ? 'selected' : ''}>All-Rounder</option>
@@ -559,7 +567,7 @@ async function openPlayerModal(playerId = null) {
       </div>
       <div class="form-group">
         <label>Batting Style</label>
-        <select name="battingStyle">
+        <select id="pBatStyle" name="battingStyle">
           <option value="Right-hand bat">Right-hand bat</option>
           <option value="Left-hand bat">Left-hand bat</option>
         </select>
@@ -568,25 +576,32 @@ async function openPlayerModal(playerId = null) {
   `;
 
   openModal(p ? 'Edit Player' : 'Add Player', html, async () => {
-    const f = document.getElementById('playerForm');
-    if (!f.reportValidity()) return false;
-    const data = Object.fromEntries(new FormData(f).entries());
+    const name = document.getElementById('pName').value.trim();
+    const teamId = document.getElementById('pTeamId').value;
+    const role = document.getElementById('pRole').value;
+    const battingStyle = document.getElementById('pBatStyle').value;
+
+    if (!name) {
+      showToast('Please enter a player name');
+      return false;
+    }
 
     if (p) {
-      await dbPut('players', { ...p, ...data });
+      await dbPut('players', { ...p, name, teamId, role, battingStyle });
       showToast('Player updated');
     } else {
       await dbPut('players', {
         id: generateId(),
-        name: data.name,
-        teamId: data.teamId,
-        role: data.role,
-        battingStyle: data.battingStyle || 'Right-hand bat',
+        name,
+        teamId,
+        role,
+        battingStyle,
         created: new Date().toISOString()
       });
       showToast('Player registered');
     }
     renderPlayers();
+    renderDashboard();
     return true;
   });
 }
@@ -1583,17 +1598,46 @@ function toggleTheme() {
   const current = document.body.getAttribute('data-theme') || 'dark';
   const next = current === 'dark' ? 'light' : 'dark';
   document.body.setAttribute('data-theme', next);
-  saveAppSetting('theme', next);
+  
+  const themeMeta = document.querySelector('meta[name="theme-color"]');
+  if (themeMeta) {
+    themeMeta.setAttribute('content', next === 'dark' ? '#0b3b2e' : '#ffffff');
+  }
+
+  if (db) {
+    saveAppSetting('theme', next).catch(() => {});
+  }
 }
 
 async function saveAppSetting(key, val) {
-  await dbPut('settings', { key, val });
+  if (!db) return;
+  try {
+    await dbPut('settings', { key, val });
+  } catch (e) {
+    console.warn('Could not save setting:', e);
+  }
 }
 
 async function loadSavedSettings() {
-  const settings = await dbGetAll('settings');
-  const theme = settings.find(s => s.key === 'theme')?.val;
-  if (theme) document.body.setAttribute('data-theme', theme);
+  if (!db) return;
+  try {
+    const settings = await dbGetAll('settings');
+    const theme = settings.find(s => s.key === 'theme')?.val;
+    if (theme) {
+      document.body.setAttribute('data-theme', theme);
+      const themeMeta = document.querySelector('meta[name="theme-color"]');
+      if (themeMeta) {
+        themeMeta.setAttribute('content', theme === 'dark' ? '#0b3b2e' : '#ffffff');
+      }
+    }
+    const defaultFormat = settings.find(s => s.key === 'defaultFormat')?.val;
+    if (defaultFormat) {
+      const sel = document.getElementById('settingDefaultFormat');
+      if (sel) sel.value = defaultFormat;
+    }
+  } catch (e) {
+    console.warn('Could not load settings:', e);
+  }
 }
 
 function openModal(title, htmlContent, onSaveCallback, showSaveBtn = true) {
@@ -1603,34 +1647,52 @@ function openModal(title, htmlContent, onSaveCallback, showSaveBtn = true) {
 
   const footer = document.getElementById('modalFooter');
   footer.innerHTML = `
-    <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-    ${showSaveBtn ? `<button class="btn btn-primary" id="modalSubmitBtn">Save</button>` : ''}
+    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+    ${showSaveBtn ? `<button type="button" class="btn btn-primary" id="modalSubmitBtn">Save</button>` : ''}
   `;
 
   if (showSaveBtn) {
-    document.getElementById('modalSubmitBtn').onclick = async () => {
-      const success = await onSaveCallback();
-      if (success !== false) closeModal();
+    document.getElementById('modalSubmitBtn').onclick = async (e) => {
+      e.preventDefault();
+      try {
+        const success = await onSaveCallback();
+        if (success !== false) closeModal();
+      } catch (err) {
+        showToast(err.message || 'Error saving');
+      }
     };
   }
 
-  modal.showModal();
+  if (typeof modal.showModal === 'function') {
+    modal.showModal();
+  } else {
+    modal.setAttribute('open', '');
+  }
 }
 
 function closeModal() {
   const modal = document.getElementById('appModal');
-  if (modal.open) modal.close();
+  if (modal.open) {
+    modal.close();
+  } else {
+    modal.removeAttribute('open');
+  }
 }
 
 // App Launch
-document.addEventListener('DOMContentLoaded', async () => {
-  await openDatabase();
-  await loadSavedSettings();
-  navigate('dashboard');
-
+document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('themeToggleBtn')?.addEventListener('click', toggleTheme);
 
-  // PWA Service Worker Registration
+  openDatabase()
+    .then(async () => {
+      await loadSavedSettings();
+      renderDashboard();
+    })
+    .catch((err) => {
+      console.error('Database launch error:', err);
+      showToast('Running in local storage fallback mode.');
+    });
+
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
   }
