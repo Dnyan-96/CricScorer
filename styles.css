@@ -787,3 +787,96 @@ dialog::backdrop {
 .hidden {
   display: none !important;
 }
+
+
+/* Live Match Insights Box */
+.insights-box {
+  background: linear-gradient(135deg, rgba(0, 230, 118, 0.08), rgba(0, 176, 255, 0.08));
+  border: 1px solid var(--border-light);
+  border-left: 4px solid var(--primary);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+.insights-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.insights-header span {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+.insights-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.insight-item {
+  font-size: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--text-main);
+  line-height: 1.35;
+}
+.insight-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+/* Crease & Bowler Dropdown Controls */
+.crease-manager-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+.crease-dropdown-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  margin-top: 6px;
+}
+@media (max-width: 600px) {
+  .crease-dropdown-row {
+    grid-template-columns: 1fr;
+  }
+}
+.crease-selector-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.crease-selector-group label {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+}
+.crease-select {
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border);
+  color: var(--text-main);
+  padding: 7px 8px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  outline: none;
+  width: 100%;
+}
+.crease-select:focus {
+  border-color: var(--primary);
+}
+.crease-select.striker-select {
+  border-left: 3px solid var(--primary);
+}
+.crease-select.bowler-select {
+  border-left: 3px solid var(--accent);
+}

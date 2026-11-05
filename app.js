@@ -777,6 +777,121 @@ async function resumeLatestLiveMatch() {
   }
 }
 
+// ==========================================
+// CREASE & ROLES MANAGEMENT ON THE FLY
+// ==========================================
+
+async function changeStriker(newStrikerId) {
+  if (!activeMatch) return;
+  const inn = activeMatch.innings[activeMatch.innings.length - 1];
+  if (newStrikerId === inn.nonStrikerId) {
+    showToast('Striker and Non-Striker cannot be the same player.');
+    renderLiveScorerView();
+    return;
+  }
+  inn.strikerId = newStrikerId;
+  await saveActiveMatch();
+  showToast('Striker updated');
+  renderLiveScorerView();
+}
+
+async function changeNonStriker(newNonStrikerId) {
+  if (!activeMatch) return;
+  const inn = activeMatch.innings[activeMatch.innings.length - 1];
+  if (newNonStrikerId === inn.strikerId) {
+    showToast('Non-Striker and Striker cannot be the same player.');
+    renderLiveScorerView();
+    return;
+  }
+  inn.nonStrikerId = newNonStrikerId;
+  await saveActiveMatch();
+  showToast('Non-Striker updated');
+  renderLiveScorerView();
+}
+
+async function changeBowler(newBowlerId) {
+  if (!activeMatch) return;
+  const inn = activeMatch.innings[activeMatch.innings.length - 1];
+  inn.bowlerId = newBowlerId;
+  await saveActiveMatch();
+  showToast('Active Bowler updated');
+  renderLiveScorerView();
+}
+
+function generateMatchInsights(inn, stats, match) {
+  const insights = [];
+  const legalBalls = stats.legalDeliveries;
+  const overs = legalBalls / 6;
+  const crr = overs > 0 ? (stats.totalRuns / overs) : 0;
+  const totalOvers = match.overs || 20;
+  const totalMaxBalls = totalOvers * 6;
+  const ballsRemaining = Math.max(0, totalMaxBalls - legalBalls);
+
+  // 1. Target Tracking (2nd Innings)
+  if (match.target) {
+    const runsNeeded = Math.max(0, match.target - stats.totalRuns);
+    if (runsNeeded <= 0) {
+      insights.push({ icon: '🏆', text: 'Target reached! Match victory.' });
+    } else if (ballsRemaining === 0) {
+      insights.push({ icon: '⚠️', text: `Innings ended. Short by ${runsNeeded} runs.` });
+    } else {
+      const rrr = (runsNeeded / (ballsRemaining / 6)).toFixed(2);
+      insights.push({
+        icon: '🎯',
+        text: `Need <strong>${runsNeeded} runs</strong> from <strong>${ballsRemaining} balls</strong> (RRR: <strong>${rrr}</strong> vs CRR: <strong>${crr.toFixed(2)}</strong>)`
+      });
+    }
+  } else if (overs >= 1) {
+    // 1st Innings Projected Total
+    const projected = Math.round(crr * totalOvers);
+    insights.push({
+      icon: '📊',
+      text: `Projected total at current ${crr.toFixed(2)} RPO: <strong>~${projected} runs</strong>`
+    });
+  }
+
+  // 2. Striker Momentum
+  const striker = stats.batters.find(b => b.id === inn.strikerId);
+  if (striker && striker.balls >= 6) {
+    const sr = parseFloat(striker.strikeRate);
+    if (sr >= 160) {
+      insights.push({ icon: '🔥', text: `<strong>${escapeHTML(striker.name)}</strong> in attacking flow: ${striker.runs} off ${striker.balls} (SR: ${sr.toFixed(0)})` });
+    } else if (sr < 85 && striker.runs >= 10) {
+      insights.push({ icon: '⏳', text: `<strong>${escapeHTML(striker.name)}</strong> holding anchor: ${striker.runs} off ${striker.balls} balls` });
+    }
+  }
+
+  // 3. Bowler Spell Analysis
+  const bowler = stats.bowlers.find(b => b.id === inn.bowlerId);
+  if (bowler && bowler.legalBalls >= 6) {
+    const econ = parseFloat(bowler.economy);
+    if (econ <= 6.0) {
+      insights.push({ icon: '⚡', text: `<strong>${escapeHTML(bowler.name)}</strong> bowling tight spell (${econ.toFixed(2)} Econ, ${bowler.wickets} wkts)` });
+    } else if (econ >= 11.5) {
+      insights.push({ icon: '📈', text: `<strong>${escapeHTML(bowler.name)}</strong> conceding ${econ.toFixed(2)} RPO - consider bowling rotation` });
+    }
+  }
+
+  // 4. Dot-ball Pressure
+  const recent6 = inn.balls.slice(-6);
+  if (recent6.length >= 6) {
+    const dotsInLast6 = recent6.filter(b => b.batRuns === 0 && !b.extraType && !b.wicket).length;
+    if (dotsInLast6 >= 4) {
+      insights.push({ icon: '🧱', text: `Bowling pressure mounting: <strong>${dotsInLast6} dots</strong> in last 6 deliveries` });
+    }
+    const boundariesInLast6 = recent6.filter(b => b.batRuns === 4 || b.batRuns === 6).length;
+    if (boundariesInLast6 >= 3) {
+      insights.push({ icon: '💥', text: `Boundary surge: <strong>${boundariesInLast6} boundaries</strong> in last over` });
+    }
+  }
+
+  if (!insights.length) {
+    insights.push({ icon: '🏏', text: 'Innings in progress. Use the dropdowns above to switch striker, non-striker, or bowler at any point.' });
+  }
+
+  return insights;
+}
+
 async function renderLiveScorerView() {
   const container = document.getElementById('liveScorerContainer');
   if (!activeMatch) {
@@ -806,8 +921,12 @@ async function renderLiveScorerView() {
   const bowlerStats = stats.bowlers.find(b => b.id === bowler?.id) || { oversFormatted: '0.0', runsConceded: 0, wickets: 0, economy: '0.00' };
 
   // Current over balls (last deliveries of current over)
-  const currentOverLegalCount = stats.legalDeliveries % 6;
   const recentBalls = inn.balls.slice(-8);
+
+  // Available batters & bowlers for dropdown selection
+  const dismissedIds = new Set(stats.fallOfWickets.map(f => f.playerId || ''));
+  const availableBatters = inn.squad.filter(p => !dismissedIds.has(p.id) || p.id === inn.strikerId || p.id === inn.nonStrikerId);
+  const matchInsights = generateMatchInsights(inn, stats, activeMatch);
 
   container.innerHTML = `
     <!-- Top Match Header -->
@@ -824,7 +943,55 @@ async function renderLiveScorerView() {
       </div>
     </div>
 
-    <!-- On-Crease Batters & Active Bowler -->
+    <!-- Live Match Insights -->
+    <div class="insights-box">
+      <div class="insights-header">
+        <span>⚡ Live Match Insights</span>
+      </div>
+      <div class="insights-list">
+        ${matchInsights.map(item => `
+          <div class="insight-item">
+            <span class="insight-icon">${item.icon}</span>
+            <span>${item.text}</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+
+    <!-- Crease & Bowler Dropdown Manager -->
+    <div class="card crease-manager-card">
+      <div class="eyebrow" style="margin-bottom:6px;">Manage Crease & Bowler on the fly</div>
+      <div class="crease-dropdown-row">
+        <div class="crease-selector-group">
+          <label>Striker (★)</label>
+          <select class="crease-select striker-select" onchange="changeStriker(this.value)">
+            ${availableBatters.map(p => `
+              <option value="${p.id}" ${p.id === inn.strikerId ? 'selected' : ''}>★ ${escapeHTML(p.name)}</option>
+            `).join('')}
+          </select>
+        </div>
+
+        <div class="crease-selector-group">
+          <label>Non-Striker</label>
+          <select class="crease-select" onchange="changeNonStriker(this.value)">
+            ${availableBatters.map(p => `
+              <option value="${p.id}" ${p.id === inn.nonStrikerId ? 'selected' : ''}>${escapeHTML(p.name)}</option>
+            `).join('')}
+          </select>
+        </div>
+
+        <div class="crease-selector-group">
+          <label>Current Bowler</label>
+          <select class="crease-select bowler-select" onchange="changeBowler(this.value)">
+            ${inn.bowlingSquad.map(b => `
+              <option value="${b.id}" ${b.id === inn.bowlerId ? 'selected' : ''}>⚡ ${escapeHTML(b.name)}</option>
+            `).join('')}
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- On-Crease Batters & Active Bowler Live Stats -->
     <div class="card" style="padding:10px;">
       <table class="crease-table">
         <thead>
