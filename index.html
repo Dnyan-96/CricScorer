@@ -277,53 +277,103 @@
       </div>
     </section>
 
-    <!-- VIEW 8: SETTINGS -->
+        <!-- VIEW 8: SETTINGS & TEAM PREFERENCES -->
     <section id="settings" class="page">
       <div class="page-header">
         <div>
-          <p class="eyebrow">PREFERENCES & AUDIT</p>
+          <p class="eyebrow">PREFERENCES & CONTROLS</p>
           <h1>Settings</h1>
         </div>
       </div>
 
-      <div class="card settings-card">
-        <h3>Theme & Display</h3>
-        <div class="setting-item">
-          <div>
-            <strong>Color Theme</strong>
-            <p class="muted">Switch between high-contrast dark green or crisp light mode.</p>
+      <!-- GROUP 1: DISPLAY & SCORING ERGONOMICS -->
+      <div class="settings-group">
+        <div class="settings-group-title">📱 Display & Scoring Comfort</div>
+        <div class="card">
+          <div class="setting-item">
+            <div>
+              <strong>Dark / Light Theme</strong>
+              <p class="muted">High contrast green dark mode or crisp daylight mode.</p>
+            </div>
+            <label class="switch" aria-label="Toggle Dark/Light Theme">
+              <input type="checkbox" id="settingThemeToggle" onchange="handleThemeSwitch(this.checked)">
+              <span class="slider"></span>
+            </label>
           </div>
-          <button class="btn btn-secondary" onclick="toggleTheme()">Toggle Theme</button>
-        </div>
 
-        <div class="setting-item">
-          <div>
-            <strong>Default Match Format</strong>
-            <p class="muted">Preferred format pre-selected in Match Creation.</p>
+          <div class="setting-item">
+            <div>
+              <strong>Keep Screen Awake</strong>
+              <p class="muted">Prevents phone display from sleeping while on the live scoring screen.</p>
+            </div>
+            <label class="switch" aria-label="Keep Screen Awake">
+              <input type="checkbox" id="settingWakeLock" onchange="toggleWakeLockPreference(this.checked)">
+              <span class="slider"></span>
+            </label>
           </div>
-          <select id="settingDefaultFormat" onchange="saveAppSetting('defaultFormat', this.value)">
-            <option value="T20">T20</option>
-            <option value="T10">T10</option>
-            <option value="ODI">ODI</option>
-            <option value="Test">Test</option>
-            <option value="Custom">Custom</option>
-          </select>
-        </div>
 
-        <div class="setting-item">
-          <div>
-            <strong>Auditing & Storage Engine</strong>
-            <p class="muted">Native IndexedDB: <code>LocalCricketDB</code> (v2). 100% offline.</p>
+          <div class="setting-item">
+            <div>
+              <strong>Haptic Tap Feedback</strong>
+              <p class="muted">Vibrate device on scoring buttons, boundaries, and wickets.</p>
+            </div>
+            <label class="switch" aria-label="Haptic Tap Feedback">
+              <input type="checkbox" id="settingHaptics" onchange="saveAppSetting('haptics', this.checked)">
+              <span class="slider"></span>
+            </label>
           </div>
-          <span class="badge badge-success">Active & Healthy</span>
         </div>
+      </div>
 
-        <div class="setting-item">
-          <div>
-            <strong>Storage Quota Inspection</strong>
-            <p class="muted" id="storageQuotaLabel">Calculating storage...</p>
+      <!-- GROUP 2: MATCH DEFAULTS -->
+      <div class="settings-group">
+        <div class="settings-group-title">🏏 Match & Rule Defaults</div>
+        <div class="card">
+          <div class="setting-item">
+            <div>
+              <strong>Default Match Format</strong>
+              <p class="muted">Pre-fills overs in Match Setup.</p>
+            </div>
+            <select id="settingDefaultFormat" class="crease-select" style="max-width:140px;" onchange="saveAppSetting('defaultFormat', this.value)">
+              <option value="T20">T20 (20 ov)</option>
+              <option value="T10">T10 (10 ov)</option>
+              <option value="ODI">ODI (50 ov)</option>
+              <option value="Custom">Custom</option>
+            </select>
           </div>
-          <button class="btn btn-secondary" onclick="inspectStorageQuota()">Check Quota</button>
+
+          <div class="setting-item">
+            <div>
+              <strong>Max Overs per Bowler Cap</strong>
+              <p class="muted">Alerts when a bowler reaches their allowable quota.</p>
+            </div>
+            <select id="settingBowlerCap" class="crease-select" style="max-width:150px;" onchange="saveAppSetting('bowlerCapRule', this.value)">
+              <option value="oneFifth">1/5th of Total</option>
+              <option value="oneFourth">1/4th of Total</option>
+              <option value="none">No Restriction</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- GROUP 3: DATABASE DIAGNOSTICS & HEALTH -->
+      <div class="settings-group">
+        <div class="settings-group-title">💾 Local Database Health</div>
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+            <div>
+              <strong>IndexedDB Storage (100% Offline)</strong>
+              <p class="muted" id="storageQuotaDetail">LocalCricketDB v2</p>
+            </div>
+            <button class="btn btn-secondary" style="font-size:12px; padding:6px 12px;" onclick="inspectStorageQuota()">Check Quota</button>
+          </div>
+
+          <div class="db-pill-grid">
+            <div class="db-pill"><strong id="dbCountTeams">0</strong><span>Teams</span></div>
+            <div class="db-pill"><strong id="dbCountPlayers">0</strong><span>Players</span></div>
+            <div class="db-pill"><strong id="dbCountMatches">0</strong><span>Matches</span></div>
+            <div class="db-pill"><strong id="dbCountDeliveries">0</strong><span>Deliveries</span></div>
+          </div>
         </div>
       </div>
     </section>

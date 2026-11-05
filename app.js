@@ -893,6 +893,12 @@ function generateMatchInsights(inn, stats, match) {
 }
 
 async function renderLiveScorerView() {
+  // Activate wakeLock if enabled in settings
+  if (typeof dbGetAll === 'function') {
+    dbGetAll('settings').then(st => {
+      if (st.find(s => s.key === 'wakeLock')?.val) requestWakeLock();
+    }).catch(() => {});
+  }
   const container = document.getElementById('liveScorerContainer');
   if (!activeMatch) {
     container.innerHTML = `
@@ -1112,6 +1118,7 @@ async function recordBallEvent(runs) {
   };
 
   inn.balls.push(ball);
+  triggerHaptic(runs === 4 || runs === 6 ? 'boundary' : 'normal');
 
   // Auto Strike Rotation on Odd Runs
   if (runs % 2 !== 0) {
@@ -1162,6 +1169,7 @@ async function recordExtraPrompt(extraType) {
   };
 
   inn.balls.push(ball);
+  triggerHaptic('normal');
 
   // Check strike rotation for byes/leg-byes/wides on odd additional runs
   if (addRuns % 2 !== 0) {
@@ -1247,6 +1255,7 @@ function openWicketModal() {
     };
 
     inn.balls.push(ball);
+    triggerHaptic('wicket');
 
     // Replace out batter with incoming
     if (inn.strikerId === outBatterId) {
@@ -1313,6 +1322,7 @@ async function undoLastDelivery() {
     return;
   }
   const removed = inn.balls.pop();
+  triggerHaptic('normal');
   showToast('Last delivery undone');
   await saveActiveMatch();
   renderLiveScorerView();
@@ -1843,6 +1853,115 @@ function closeModal() {
     modal.close();
   } else {
     modal.removeAttribute('open');
+  }
+}
+
+
+// ==========================================
+// SCREEN WAKE LOCK & HAPTIC VIBRATION
+// ==========================================
+
+let screenWakeLock = null;
+
+async function toggleWakeLockPreference(enabled) {
+  await saveAppSetting('wakeLock', enabled);
+  if (enabled) {
+    requestWakeLock();
+  } else if (screenWakeLock) {
+    screenWakeLock.release().then(() => { screenWakeLock = null; });
+  }
+}
+
+async function requestWakeLock() {
+  if ('wakeLock' in navigator) {
+    try {
+      screenWakeLock = await navigator.wakeLock.request('screen');
+      screenWakeLock.addEventListener('release', () => { screenWakeLock = null; });
+    } catch (err) {
+      console.warn('Wake Lock error:', err);
+    }
+  }
+}
+
+function triggerHaptic(type = 'normal') {
+  const hapticSetting = document.getElementById('settingHaptics')?.checked;
+  if (!hapticSetting || !('vibrate' in navigator)) return;
+
+  if (type === 'boundary') {
+    navigator.vibrate([40, 60, 40]); // Double buzz for 4s and 6s
+  } else if (type === 'wicket') {
+    navigator.vibrate(120);          // Long buzz for wickets
+  } else {
+    navigator.vibrate(25);           // Short tap confirmation
+  }
+}
+
+function handleThemeSwitch(isLight) {
+  const targetTheme = isLight ? 'light' : 'dark';
+  document.body.setAttribute('data-theme', targetTheme);
+  
+  const themeMeta = document.querySelector('meta[name="theme-color"]');
+  if (themeMeta) {
+    themeMeta.setAttribute('content', targetTheme === 'dark' ? '#0b3b2e' : '#ffffff');
+  }
+
+  saveAppSetting('theme', targetTheme);
+}
+
+async function renderSettings() {
+  if (!db) await openDatabase();
+  const [teams, players, matches, settings] = await Promise.all([
+    dbGetAll('teams'), dbGetAll('players'), dbGetAll('matches'), dbGetAll('settings')
+  ]);
+
+  // Update Database Health Metrics
+  const teamsEl = document.getElementById('dbCountTeams');
+  if (teamsEl) teamsEl.textContent = teams.length;
+  const playersEl = document.getElementById('dbCountPlayers');
+  if (playersEl) playersEl.textContent = players.length;
+  const matchesEl = document.getElementById('dbCountMatches');
+  if (matchesEl) matchesEl.textContent = matches.length;
+
+  let totalBalls = 0;
+  matches.forEach(m => (m.innings || []).forEach(inn => { totalBalls += (inn.balls || []).length; }));
+  const delivEl = document.getElementById('dbCountDeliveries');
+  if (delivEl) delivEl.textContent = totalBalls;
+
+  // Sync Theme Toggle Switch
+  const currentTheme = document.body.getAttribute('data-theme') || 'dark';
+  const themeToggle = document.getElementById('settingThemeToggle');
+  if (themeToggle) themeToggle.checked = (currentTheme === 'light');
+
+  // Sync Wake Lock Switch
+  const wakeVal = settings.find(s => s.key === 'wakeLock')?.val;
+  const wakeToggle = document.getElementById('settingWakeLock');
+  if (wakeToggle) wakeToggle.checked = !!wakeVal;
+
+  // Sync Haptics Switch (defaults to true)
+  const hapticsVal = settings.find(s => s.key === 'haptics')?.val;
+  const hapticsToggle = document.getElementById('settingHaptics');
+  if (hapticsToggle) hapticsToggle.checked = (hapticsVal !== false);
+
+  // Sync Default Format
+  const defaultFormat = settings.find(s => s.key === 'defaultFormat')?.val;
+  const formatSelect = document.getElementById('settingDefaultFormat');
+  if (formatSelect && defaultFormat) formatSelect.value = defaultFormat;
+
+  // Sync Bowler Cap
+  const bowlerCap = settings.find(s => s.key === 'bowlerCapRule')?.val;
+  const capSelect = document.getElementById('settingBowlerCap');
+  if (capSelect && bowlerCap) capSelect.value = bowlerCap;
+
+  inspectStorageQuota();
+}
+
+async function inspectStorageQuota() {
+  const quotaEl = document.getElementById('storageQuotaDetail');
+  if (navigator.storage && navigator.storage.estimate) {
+    const est = await navigator.storage.estimate();
+    const usedMB = (est.usage / (1024 * 1024)).toFixed(2);
+    const quotaMB = (est.quota / (1024 * 1024)).toFixed(0);
+    if (quotaEl) quotaEl.textContent = `Using ${usedMB} MB of ~${quotaMB} MB quota available.`;
   }
 }
 
