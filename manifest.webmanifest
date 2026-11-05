@@ -1,5 +1,5 @@
 {
-  "name": "CricScorer 2.0 - Offline Cricket Manager",
+  "name": "CricScorer",
   "short_name": "CricScorer",
   "start_url": "./index.html",
   "scope": "./",
@@ -7,7 +7,7 @@
   "background_color": "#06110d",
   "theme_color": "#0b3b2e",
   "orientation": "portrait",
-  "description": "Professional offline-first cricket scorecard and tournament manager",
+  "description": "Offline cricket scorecard and team manager",
   "icons": [
     {
       "src": "icon.svg",

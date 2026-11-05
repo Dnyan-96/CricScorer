@@ -93,13 +93,23 @@ body {
   color: var(--primary);
 }
 .v-badge {
-  font-size: 10px;
-  font-weight: 700;
-  background: var(--lime);
-  color: #0b2217;
-  padding: 2px 5px;
-  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 800;
+  background: var(--primary);
+  color: #04140c;
+  padding: 2px 7px;
+  border-radius: 6px;
+  display: inline-block;
+  line-height: 1.2;
   vertical-align: middle;
+}
+body[data-theme="light"] .v-badge {
+  background: #127c52;
+  color: #ffffff;
+}
+body[data-theme="dark"] .v-badge {
+  background: #00e676;
+  color: #03140a;
 }
 .brand-tag {
   font-size: 11px;

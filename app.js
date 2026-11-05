@@ -1848,7 +1848,7 @@ function closeModal() {
 
 // App Launch
 document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('themeToggleBtn')?.addEventListener('click', toggleTheme);
+  // themeToggleBtn handled directly via onclick in index.html
 
   openDatabase()
     .then(async () => {
