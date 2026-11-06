@@ -214,9 +214,13 @@
         <button class="btn btn-primary" onclick="openPlayerModal()">＋ Add Player</button>
       </div>
       <div class="filter-bar">
-        <input type="text" id="playerSearchInput" placeholder="Search by player name..." oninput="renderPlayers()">
-        <select id="playerTeamFilter" onchange="renderPlayers()">
-          <option value="">All Teams</option>
+        <input type="text" id="playerSearchInput" placeholder="Search player by name..." oninput="renderPlayers()">
+        <select id="playerRoleFilter" onchange="renderPlayers()">
+          <option value="">All Roles</option>
+          <option value="Batter">Batter</option>
+          <option value="Bowler">Bowler</option>
+          <option value="All-Rounder">All-Rounder</option>
+          <option value="Wicket-Keeper">Wicket-Keeper</option>
         </select>
       </div>
       <div id="playersContainer" class="stack-list empty-state">No players added yet.</div>
@@ -373,6 +377,39 @@
             <div class="db-pill"><strong id="dbCountPlayers">0</strong><span>Players</span></div>
             <div class="db-pill"><strong id="dbCountMatches">0</strong><span>Matches</span></div>
             <div class="db-pill"><strong id="dbCountDeliveries">0</strong><span>Deliveries</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- GROUP 4: BACKUP & RESTORE -->
+      <div class="settings-group">
+        <div class="settings-group-title">🔄 Backup & Restore</div>
+        <div class="card">
+          <div class="setting-item">
+            <div>
+              <strong>Export Database Backup</strong>
+              <p class="muted">Download all teams, players, and match records as a single JSON file.</p>
+            </div>
+            <button class="btn btn-primary" onclick="exportFullDatabaseJSON()">Download JSON</button>
+          </div>
+
+          <div class="setting-item">
+            <div>
+              <strong>Restore Database Backup</strong>
+              <p class="muted">Restore previously saved matches and players from a JSON file.</p>
+            </div>
+            <div>
+              <input type="file" id="settingsImportFile" accept="application/json,.json" style="display:none;" onchange="handleBackupFileSelect(event)">
+              <button class="btn btn-secondary" onclick="document.getElementById('settingsImportFile').click()">Select File</button>
+            </div>
+          </div>
+
+          <div class="setting-item" style="border-bottom:none;">
+            <div>
+              <strong style="color:var(--danger);">Clear All Local Records</strong>
+              <p class="muted">Permanently erase local data and start fresh.</p>
+            </div>
+            <button class="btn btn-danger" onclick="confirmWipeAllData()">Clear Data</button>
           </div>
         </div>
       </div>

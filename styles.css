@@ -480,8 +480,30 @@ main {
 .live-score-big {
   font-size: 42px;
   font-weight: 900;
-  color: #ffffff;
+  color: var(--text-main);
   letter-spacing: -1px;
+}
+body[data-theme="dark"] .live-score-big {
+  color: #ffffff;
+}
+body[data-theme="light"] .live-score-big {
+  color: #0b3b2e;
+}
+body[data-theme="light"] .score-hero-box {
+  background: linear-gradient(180deg, #ffffff, #e6f2eb);
+  border-color: #c0d8c9;
+  box-shadow: 0 4px 15px rgba(11, 59, 46, 0.08);
+}
+body[data-theme="light"] .live-rates-row {
+  background: #d8eadf;
+  color: #3b5c4b;
+}
+body[data-theme="light"] .live-rates-row strong {
+  color: #0b3b2e;
+}
+body[data-theme="light"] .match-vs-header,
+body[data-theme="light"] .live-overs-big {
+  color: #4a6b5a;
 }
 .live-overs-big {
   font-size: 16px;

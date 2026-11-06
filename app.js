@@ -484,80 +484,55 @@ async function deleteTeamPrompt(teamId) {
 }
 
 // ==========================================
-// 6. PLAYERS MANAGEMENT MODULE
+// 6. PLAYERS MANAGEMENT MODULE (Independent Player Pool)
 // ==========================================
 
 async function renderPlayers() {
-  const [players, teams] = await Promise.all([dbGetAll('players'), dbGetAll('teams')]);
+  const players = await dbGetAll('players');
   const container = document.getElementById('playersContainer');
   const search = (document.getElementById('playerSearchInput')?.value || '').toLowerCase();
-  const teamFilter = document.getElementById('playerTeamFilter')?.value || '';
-
-  // Populate filter dropdown
-  const filterDropdown = document.getElementById('playerTeamFilter');
-  if (filterDropdown && filterDropdown.options.length <= 1) {
-    teams.forEach(t => {
-      const opt = document.createElement('option');
-      opt.value = t.id;
-      opt.textContent = t.name;
-      filterDropdown.appendChild(opt);
-    });
-  }
+  const roleFilter = document.getElementById('playerRoleFilter')?.value || '';
 
   let filtered = players.filter(p => {
     const matchName = p.name.toLowerCase().includes(search);
-    const matchTeam = !teamFilter || p.teamId === teamFilter;
-    return matchName && matchTeam;
+    const matchRole = !roleFilter || p.role === roleFilter;
+    return matchName && matchRole;
   });
 
   if (!filtered.length) {
     container.className = 'stack-list empty-state';
-    container.textContent = 'No players matching criteria.';
+    container.textContent = 'No players found matching criteria. Tap "+ Add Player" to add players.';
     return;
   }
 
   container.className = 'stack-list';
-  container.innerHTML = filtered.map(p => {
-    const teamObj = teams.find(t => t.id === p.teamId);
-    return `
-      <div class="player-item">
-        <div class="item-info">
-          <h3>${escapeHTML(p.name)}</h3>
-          <p>${escapeHTML(teamObj?.name || 'Unassigned')} · Role: <strong>${escapeHTML(p.role || 'Batter')}</strong></p>
-        </div>
-        <div class="item-actions">
-          <button class="btn btn-secondary" onclick="openPlayerModal('${p.id}')">Edit</button>
-          <button class="btn btn-outline" onclick="deletePlayerPrompt('${p.id}')">Remove</button>
-        </div>
+  container.innerHTML = filtered.map(p => `
+    <div class="player-item">
+      <div class="item-info">
+        <h3>${escapeHTML(p.name)}</h3>
+        <p>Role: <strong>${escapeHTML(p.role || 'Batter')}</strong> · ${escapeHTML(p.battingStyle || 'Right-hand bat')}</p>
       </div>
-    `;
-  }).join('');
+      <div class="item-actions">
+        <button class="btn btn-secondary" onclick="openPlayerModal('${p.id}')">Edit</button>
+        <button class="btn btn-outline" onclick="deletePlayerPrompt('${p.id}')">Remove</button>
+      </div>
+    </div>
+  `).join('');
 }
 
 async function openPlayerModal(playerId = null) {
   if (!db) await openDatabase();
-  const [players, teams] = await Promise.all([dbGetAll('players'), dbGetAll('teams')]);
-  if (!teams.length) {
-    showToast('Please create a team first.');
-    openTeamModal();
-    return;
-  }
-
+  const players = await dbGetAll('players');
   const p = playerId ? players.find(x => x.id === playerId) : null;
-  const teamOpts = teams.map(t => `<option value="${t.id}" ${p && p.teamId === t.id ? 'selected' : ''}>${escapeHTML(t.name)}</option>`).join('');
 
   const html = `
     <form id="playerForm" onsubmit="event.preventDefault();">
       <div class="form-group" style="margin-bottom:12px;">
         <label>Player Full Name *</label>
-        <input type="text" id="pName" name="name" required value="${escapeHTML(p?.name || '')}" placeholder="e.g. Virat Kohli">
+        <input type="text" id="pName" name="name" required value="${escapeHTML(p?.name || '')}" placeholder="e.g. Rohit Sharma">
       </div>
       <div class="form-group" style="margin-bottom:12px;">
-        <label>Assign Team *</label>
-        <select id="pTeamId" name="teamId" required>${teamOpts}</select>
-      </div>
-      <div class="form-group" style="margin-bottom:12px;">
-        <label>Role</label>
+        <label>Primary Role</label>
         <select id="pRole" name="role">
           <option value="Batter" ${p?.role === 'Batter' ? 'selected' : ''}>Batter</option>
           <option value="Bowler" ${p?.role === 'Bowler' ? 'selected' : ''}>Bowler</option>
@@ -568,8 +543,8 @@ async function openPlayerModal(playerId = null) {
       <div class="form-group">
         <label>Batting Style</label>
         <select id="pBatStyle" name="battingStyle">
-          <option value="Right-hand bat">Right-hand bat</option>
-          <option value="Left-hand bat">Left-hand bat</option>
+          <option value="Right-hand bat" ${p?.battingStyle === 'Right-hand bat' ? 'selected' : ''}>Right-hand bat</option>
+          <option value="Left-hand bat" ${p?.battingStyle === 'Left-hand bat' ? 'selected' : ''}>Left-hand bat</option>
         </select>
       </div>
     </form>
@@ -577,7 +552,6 @@ async function openPlayerModal(playerId = null) {
 
   openModal(p ? 'Edit Player' : 'Add Player', html, async () => {
     const name = document.getElementById('pName').value.trim();
-    const teamId = document.getElementById('pTeamId').value;
     const role = document.getElementById('pRole').value;
     const battingStyle = document.getElementById('pBatStyle').value;
 
@@ -587,18 +561,17 @@ async function openPlayerModal(playerId = null) {
     }
 
     if (p) {
-      await dbPut('players', { ...p, name, teamId, role, battingStyle });
+      await dbPut('players', { ...p, name, role, battingStyle });
       showToast('Player updated');
     } else {
       await dbPut('players', {
         id: generateId(),
         name,
-        teamId,
         role,
         battingStyle,
         created: new Date().toISOString()
       });
-      showToast('Player registered');
+      showToast('Player added to squad pool');
     }
     renderPlayers();
     renderDashboard();
@@ -652,7 +625,7 @@ function onFormatChange(format) {
 async function updateTeamDropdowns() {
   const teamAId = document.getElementById('cmTeamA').value;
   const teamBId = document.getElementById('cmTeamB').value;
-  const [teams, players] = await Promise.all([dbGetAll('teams'), dbGetAll('players')]);
+  const [teams, allPlayers] = await Promise.all([dbGetAll('teams'), dbGetAll('players')]);
 
   // Update Toss Winner Labels
   const tossSel = document.getElementById('cmTossWinner');
@@ -663,24 +636,27 @@ async function updateTeamDropdowns() {
     <option value="${teamBId}">${escapeHTML(teamBName)}</option>
   `;
 
-  // Render squad checklists
-  const playersA = players.filter(p => p.teamId === teamAId);
-  const playersB = players.filter(p => p.teamId === teamBId);
-
   const listA = document.getElementById('squadListA');
   const listB = document.getElementById('squadListB');
 
-  listA.innerHTML = playersA.length ? playersA.map(p => `
-    <label class="checklist-item">
-      <input type="checkbox" name="squadA" value="${p.id}" checked> ${escapeHTML(p.name)} (${p.role || 'Player'})
-    </label>
-  `).join('') : '<p class="muted">No players in this team yet.</p>';
+  if (!allPlayers.length) {
+    listA.innerHTML = '<p class="muted">No players added yet. Tap "+ Add Player" to register players.</p>';
+    listB.innerHTML = '<p class="muted">No players added yet. Tap "+ Add Player" to register players.</p>';
+    return;
+  }
 
-  listB.innerHTML = playersB.length ? playersB.map(p => `
+  // Populate all squad players dynamically for both teams
+  listA.innerHTML = allPlayers.map((p, idx) => `
     <label class="checklist-item">
-      <input type="checkbox" name="squadB" value="${p.id}" checked> ${escapeHTML(p.name)} (${p.role || 'Player'})
+      <input type="checkbox" name="squadA" value="${p.id}" ${idx % 2 === 0 ? 'checked' : ''}> ${escapeHTML(p.name)} (${p.role || 'Player'})
     </label>
-  `).join('') : '<p class="muted">No players in this team yet.</p>';
+  `).join('');
+
+  listB.innerHTML = allPlayers.map((p, idx) => `
+    <label class="checklist-item">
+      <input type="checkbox" name="squadB" value="${p.id}" ${idx % 2 !== 0 ? 'checked' : ''}> ${escapeHTML(p.name)} (${p.role || 'Player'})
+    </label>
+  `).join('');
 }
 
 async function handleCreateMatchSubmit(event) {
@@ -702,6 +678,15 @@ async function handleCreateMatchSubmit(event) {
   }
 
   const [allPlayers] = await Promise.all([dbGetAll('players')]);
+  
+  // Duplicate check across both teams
+  const duplicateId = squadAChecked.find(id => squadBChecked.includes(id));
+  if (duplicateId) {
+    const dupP = allPlayers.find(p => p.id === duplicateId);
+    alert(`Player "${dupP ? dupP.name : 'Unknown'}" is selected in both teams. Please choose distinct players.`);
+    return;
+  }
+
   const squadAPlayers = allPlayers.filter(p => squadAChecked.includes(p.id));
   const squadBPlayers = allPlayers.filter(p => squadBChecked.includes(p.id));
 
@@ -893,12 +878,6 @@ function generateMatchInsights(inn, stats, match) {
 }
 
 async function renderLiveScorerView() {
-  // Activate wakeLock if enabled in settings
-  if (typeof dbGetAll === 'function') {
-    dbGetAll('settings').then(st => {
-      if (st.find(s => s.key === 'wakeLock')?.val) requestWakeLock();
-    }).catch(() => {});
-  }
   const container = document.getElementById('liveScorerContainer');
   if (!activeMatch) {
     container.innerHTML = `
@@ -1118,7 +1097,6 @@ async function recordBallEvent(runs) {
   };
 
   inn.balls.push(ball);
-  triggerHaptic(runs === 4 || runs === 6 ? 'boundary' : 'normal');
 
   // Auto Strike Rotation on Odd Runs
   if (runs % 2 !== 0) {
@@ -1169,7 +1147,6 @@ async function recordExtraPrompt(extraType) {
   };
 
   inn.balls.push(ball);
-  triggerHaptic('normal');
 
   // Check strike rotation for byes/leg-byes/wides on odd additional runs
   if (addRuns % 2 !== 0) {
@@ -1255,7 +1232,6 @@ function openWicketModal() {
     };
 
     inn.balls.push(ball);
-    triggerHaptic('wicket');
 
     // Replace out batter with incoming
     if (inn.strikerId === outBatterId) {
@@ -1322,7 +1298,6 @@ async function undoLastDelivery() {
     return;
   }
   const removed = inn.balls.pop();
-  triggerHaptic('normal');
   showToast('Last delivery undone');
   await saveActiveMatch();
   renderLiveScorerView();
@@ -1858,7 +1833,7 @@ function closeModal() {
 
 
 // ==========================================
-// SCREEN WAKE LOCK & HAPTIC VIBRATION
+// SCREEN WAKE LOCK, HAPTICS & SETTINGS
 // ==========================================
 
 let screenWakeLock = null;
@@ -1888,11 +1863,11 @@ function triggerHaptic(type = 'normal') {
   if (!hapticSetting || !('vibrate' in navigator)) return;
 
   if (type === 'boundary') {
-    navigator.vibrate([40, 60, 40]); // Double buzz for 4s and 6s
+    navigator.vibrate([40, 60, 40]);
   } else if (type === 'wicket') {
-    navigator.vibrate(120);          // Long buzz for wickets
+    navigator.vibrate(120);
   } else {
-    navigator.vibrate(25);           // Short tap confirmation
+    navigator.vibrate(25);
   }
 }
 
@@ -1914,7 +1889,6 @@ async function renderSettings() {
     dbGetAll('teams'), dbGetAll('players'), dbGetAll('matches'), dbGetAll('settings')
   ]);
 
-  // Update Database Health Metrics
   const teamsEl = document.getElementById('dbCountTeams');
   if (teamsEl) teamsEl.textContent = teams.length;
   const playersEl = document.getElementById('dbCountPlayers');
@@ -1927,27 +1901,22 @@ async function renderSettings() {
   const delivEl = document.getElementById('dbCountDeliveries');
   if (delivEl) delivEl.textContent = totalBalls;
 
-  // Sync Theme Toggle Switch
   const currentTheme = document.body.getAttribute('data-theme') || 'dark';
   const themeToggle = document.getElementById('settingThemeToggle');
   if (themeToggle) themeToggle.checked = (currentTheme === 'light');
 
-  // Sync Wake Lock Switch
   const wakeVal = settings.find(s => s.key === 'wakeLock')?.val;
   const wakeToggle = document.getElementById('settingWakeLock');
   if (wakeToggle) wakeToggle.checked = !!wakeVal;
 
-  // Sync Haptics Switch (defaults to true)
   const hapticsVal = settings.find(s => s.key === 'haptics')?.val;
   const hapticsToggle = document.getElementById('settingHaptics');
   if (hapticsToggle) hapticsToggle.checked = (hapticsVal !== false);
 
-  // Sync Default Format
   const defaultFormat = settings.find(s => s.key === 'defaultFormat')?.val;
   const formatSelect = document.getElementById('settingDefaultFormat');
   if (formatSelect && defaultFormat) formatSelect.value = defaultFormat;
 
-  // Sync Bowler Cap
   const bowlerCap = settings.find(s => s.key === 'bowlerCapRule')?.val;
   const capSelect = document.getElementById('settingBowlerCap');
   if (capSelect && bowlerCap) capSelect.value = bowlerCap;
