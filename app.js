@@ -494,10 +494,13 @@ async function renderPlayers() {
   const roleFilter = document.getElementById('playerRoleFilter')?.value || '';
 
   let filtered = players.filter(p => {
-    const matchName = p.name.toLowerCase().includes(search);
+    const matchName = (p.name || '').toLowerCase().includes(search);
     const matchRole = !roleFilter || p.role === roleFilter;
     return matchName && matchRole;
   });
+
+  // Sort players alphabetically A-Z
+  filtered.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
 
   if (!filtered.length) {
     container.className = 'stack-list empty-state';
@@ -635,7 +638,8 @@ async function updateTeamDropdowns() {
   const teamAId = document.getElementById('cmTeamA').value;
   const teamBId = document.getElementById('cmTeamB').value;
   const [teams, allPlayers] = await Promise.all([dbGetAll('teams'), dbGetAll('players')]);
-  cachedSquadPlayers = allPlayers;
+  // Sort players alphabetically A-Z
+  cachedSquadPlayers = [...allPlayers].sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
 
   const teamAName = teams.find(t => t.id === teamAId)?.name || 'Team A';
   const teamBName = teams.find(t => t.id === teamBId)?.name || 'Team B';
@@ -688,7 +692,7 @@ function renderSquadLists() {
     const nameMatch = (p.name || '').toLowerCase().includes(currentSquadSearch);
     const roleMatch = (p.role || '').toLowerCase().includes(currentSquadSearch);
     return nameMatch || roleMatch;
-  });
+  }).sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
 
   if (!filtered.length) {
     listA.innerHTML = '<p class="muted" style="padding:8px; font-size:12px;">No matching players found.</p>';
@@ -1035,9 +1039,12 @@ async function renderLiveScorerView() {
   // Current over balls (last deliveries of current over)
   const recentBalls = inn.balls.slice(-8);
 
-  // Available batters & bowlers for dropdown selection
+  // Available batters & bowlers for dropdown selection (Alphabetical A-Z)
   const dismissedIds = new Set(stats.fallOfWickets.map(f => f.playerId || ''));
-  const availableBatters = inn.squad.filter(p => !dismissedIds.has(p.id) || p.id === inn.strikerId || p.id === inn.nonStrikerId);
+  const availableBatters = inn.squad.filter(p => !dismissedIds.has(p.id) || p.id === inn.strikerId || p.id === inn.nonStrikerId)
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
+  const sortedBowlers = [...(inn.bowlingSquad || [])]
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
   const matchInsights = generateMatchInsights(inn, stats, activeMatch);
 
   container.innerHTML = `
@@ -1095,7 +1102,7 @@ async function renderLiveScorerView() {
         <div class="crease-selector-group">
           <label>Current Bowler</label>
           <select class="crease-select bowler-select" onchange="changeBowler(this.value)">
-            ${inn.bowlingSquad.map(b => `
+            ${sortedBowlers.map(b => `
               <option value="${b.id}" ${b.id === inn.bowlerId ? 'selected' : ''}>⚡ ${escapeHTML(b.name)}</option>
             `).join('')}
           </select>
@@ -1381,7 +1388,7 @@ function onDismissalTypeChange(val) {
 function getAvailableIncomingBatters(inn) {
   const stats = CricketEngine.calculateInnings(inn);
   const outIds = new Set(stats.fallOfWickets.map(f => f.playerId || '').concat([inn.strikerId, inn.nonStrikerId]));
-  return inn.squad.filter(p => !outIds.has(p.id));
+  return inn.squad.filter(p => !outIds.has(p.id)).sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
 }
 
 function swapStrike() {
@@ -1397,7 +1404,8 @@ function swapStrike() {
 function openBowlerSelectModal() {
   if (!activeMatch) return;
   const inn = activeMatch.innings[activeMatch.innings.length - 1];
-  const opts = inn.bowlingSquad.map(b => `<option value="${b.id}" ${b.id === inn.bowlerId ? 'selected' : ''}>${escapeHTML(b.name)}</option>`).join('');
+  const sortedSquad = [...(inn.bowlingSquad || [])].sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
+  const opts = sortedSquad.map(b => `<option value="${b.id}" ${b.id === inn.bowlerId ? 'selected' : ''}>${escapeHTML(b.name)}</option>`).join('');
 
   const html = `
     <div class="form-group">
