@@ -170,17 +170,48 @@
             </div>
           </div>
 
-          <div class="squad-selection-panel" id="squadSelectionBox" style="margin-top: 15px;">
-            <h3>Playing Squad Selection</h3>
-            <p class="muted" style="margin-bottom:10px;">Select at least 2 players for each team to enable ball-by-ball scoring.</p>
-            <div class="two-col-grid">
-              <div class="card squad-picker" id="squadPickerA">
-                <h4>Team A Squad</h4>
-                <div class="squad-checklist" id="squadListA"></div>
+          <div class="squad-selection-panel" id="squadSelectionBox">
+            <div class="squad-panel-header">
+              <div>
+                <h3>Squad & Lineup Selection</h3>
+                <p class="muted">Select at least 2 players for each team. Pick who's playing without team restrictions.</p>
               </div>
-              <div class="card squad-picker" id="squadPickerB">
-                <h4>Team B Squad</h4>
-                <div class="squad-checklist" id="squadListB"></div>
+              <div class="squad-search-wrap">
+                <input type="text" id="squadSearchInput" placeholder="Filter players by name or role..." oninput="filterSquadLists(this.value)">
+              </div>
+            </div>
+
+            <div class="two-col-grid squad-grid-cards">
+              <!-- Team A Squad Card -->
+              <div class="card squad-picker-card" id="squadPickerA">
+                <div class="squad-card-header">
+                  <div class="squad-team-title">
+                    <span class="team-dot dot-a"></span>
+                    <h4 id="teamAHeading">Team A</h4>
+                  </div>
+                  <div class="squad-actions-row">
+                    <span class="badge badge-squad-count" id="countBadgeA">0 selected</span>
+                    <button type="button" class="btn-text-action" onclick="quickSelectAll('A')">All</button>
+                    <button type="button" class="btn-text-action" onclick="quickClearAll('A')">Clear</button>
+                  </div>
+                </div>
+                <div class="squad-checklist-modern" id="squadListA"></div>
+              </div>
+
+              <!-- Team B Squad Card -->
+              <div class="card squad-picker-card" id="squadPickerB">
+                <div class="squad-card-header">
+                  <div class="squad-team-title">
+                    <span class="team-dot dot-b"></span>
+                    <h4 id="teamBHeading">Team B</h4>
+                  </div>
+                  <div class="squad-actions-row">
+                    <span class="badge badge-squad-count" id="countBadgeB">0 selected</span>
+                    <button type="button" class="btn-text-action" onclick="quickSelectAll('B')">All</button>
+                    <button type="button" class="btn-text-action" onclick="quickClearAll('B')">Clear</button>
+                  </div>
+                </div>
+                <div class="squad-checklist-modern" id="squadListB"></div>
               </div>
             </div>
           </div>

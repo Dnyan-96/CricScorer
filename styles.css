@@ -1009,3 +1009,258 @@ body[data-theme="light"] input:checked + .slider:before {
   font-size: 11px;
   color: var(--text-muted);
 }
+
+
+/* ==========================================
+   MODERN SQUAD SELECTION UI
+   ========================================== */
+
+.squad-selection-panel {
+  margin-top: 18px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.squad-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.squad-panel-header h3 {
+  font-size: 16px;
+  font-weight: 800;
+  margin-bottom: 2px;
+}
+
+.squad-search-wrap {
+  flex: 1;
+  min-width: 200px;
+  max-width: 320px;
+}
+
+.squad-search-wrap input {
+  width: 100%;
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border);
+  color: var(--text-main);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  outline: none;
+}
+.squad-search-wrap input:focus {
+  border-color: var(--primary);
+}
+
+.squad-picker-card {
+  padding: 12px !important;
+  margin-bottom: 0 !important;
+  display: flex;
+  flex-direction: column;
+}
+
+.squad-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  gap: 6px;
+}
+
+.squad-team-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.team-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.team-dot.dot-a {
+  background: var(--primary);
+  box-shadow: 0 0 8px var(--primary-glow);
+}
+.team-dot.dot-b {
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(0, 176, 255, 0.4);
+}
+
+.squad-team-title h4 {
+  font-size: 14px;
+  font-weight: 800;
+  margin: 0;
+}
+
+.squad-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.badge-squad-count {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--bg-surface-alt);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+.badge-squad-count.ready {
+  background: var(--primary-glow);
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.btn-text-action {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+.btn-text-action:hover {
+  background: var(--bg-surface-hover);
+}
+
+.squad-checklist-modern {
+  max-height: 240px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 2px;
+}
+
+/* Individual Player Selection Row Tile */
+.player-select-tile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  gap: 8px;
+}
+
+.player-select-tile:hover {
+  background: var(--bg-surface-hover);
+}
+
+.player-select-tile.selected-a {
+  border-color: var(--primary);
+  background: rgba(0, 230, 118, 0.08);
+}
+body[data-theme="light"] .player-select-tile.selected-a {
+  background: rgba(18, 124, 82, 0.1);
+  border-color: var(--primary);
+}
+
+.player-select-tile.selected-b {
+  border-color: var(--accent);
+  background: rgba(0, 176, 255, 0.08);
+}
+body[data-theme="light"] .player-select-tile.selected-b {
+  background: rgba(0, 119, 194, 0.1);
+  border-color: var(--accent);
+}
+
+.player-select-tile.disabled-taken {
+  opacity: 0.38;
+  cursor: not-allowed;
+  background: transparent;
+  border-style: dashed;
+}
+
+.player-tile-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.player-custom-checkbox {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1.5px solid var(--border-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 900;
+  color: transparent;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.player-select-tile.selected-a .player-custom-checkbox {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #03140a;
+}
+.player-select-tile.selected-b .player-custom-checkbox {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
+.player-tile-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.player-tile-name {
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-main);
+}
+
+.player-tile-meta {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.player-role-badge {
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.player-select-tile.selected-a .player-role-badge {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+.player-select-tile.selected-b .player-role-badge {
+  color: var(--accent);
+  border-color: var(--accent);
+}

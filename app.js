@@ -622,41 +622,168 @@ function onFormatChange(format) {
   else { oversGroup.style.display = 'block'; }
 }
 
+// ==========================================
+// MATCH SQUAD SELECTION ENGINE (CENTRAL POOL)
+// ==========================================
+
+let selectedSquadA = new Set();
+let selectedSquadB = new Set();
+let cachedSquadPlayers = [];
+let currentSquadSearch = '';
+
 async function updateTeamDropdowns() {
   const teamAId = document.getElementById('cmTeamA').value;
   const teamBId = document.getElementById('cmTeamB').value;
   const [teams, allPlayers] = await Promise.all([dbGetAll('teams'), dbGetAll('players')]);
+  cachedSquadPlayers = allPlayers;
+
+  const teamAName = teams.find(t => t.id === teamAId)?.name || 'Team A';
+  const teamBName = teams.find(t => t.id === teamBId)?.name || 'Team B';
 
   // Update Toss Winner Labels
   const tossSel = document.getElementById('cmTossWinner');
-  const teamAName = teams.find(t => t.id === teamAId)?.name || 'Team A';
-  const teamBName = teams.find(t => t.id === teamBId)?.name || 'Team B';
-  tossSel.innerHTML = `
-    <option value="${teamAId}">${escapeHTML(teamAName)}</option>
-    <option value="${teamBId}">${escapeHTML(teamBName)}</option>
-  `;
+  if (tossSel) {
+    tossSel.innerHTML = `
+      <option value="${teamAId}">${escapeHTML(teamAName)}</option>
+      <option value="${teamBId}">${escapeHTML(teamBName)}</option>
+    `;
+  }
 
+  // Update Team Card Headings
+  const headA = document.getElementById('teamAHeading');
+  if (headA) headA.textContent = teamAName;
+  const headB = document.getElementById('teamBHeading');
+  if (headB) headB.textContent = teamBName;
+
+  // Auto-seed squads alternating if both sets are empty
+  if (selectedSquadA.size === 0 && selectedSquadB.size === 0 && allPlayers.length >= 2) {
+    allPlayers.forEach((p, idx) => {
+      if (idx % 2 === 0) selectedSquadA.add(p.id);
+      else selectedSquadB.add(p.id);
+    });
+  }
+
+  renderSquadLists();
+}
+
+function filterSquadLists(query) {
+  currentSquadSearch = (query || '').toLowerCase().trim();
+  renderSquadLists();
+}
+
+function renderSquadLists() {
   const listA = document.getElementById('squadListA');
   const listB = document.getElementById('squadListB');
+  if (!listA || !listB) return;
 
-  if (!allPlayers.length) {
-    listA.innerHTML = '<p class="muted">No players added yet. Tap "+ Add Player" to register players.</p>';
-    listB.innerHTML = '<p class="muted">No players added yet. Tap "+ Add Player" to register players.</p>';
+  if (!cachedSquadPlayers.length) {
+    listA.innerHTML = '<div class="empty-state" style="padding:12px; font-size:12px;">No players in registry yet.<br><button type="button" class="btn btn-secondary" style="margin-top:6px; font-size:11px; padding:4px 8px;" onclick="openPlayerModal()">＋ Add Player</button></div>';
+    listB.innerHTML = '<div class="empty-state" style="padding:12px; font-size:12px;">No players in registry yet.</div>';
+    updateSquadCounters();
     return;
   }
 
-  // Populate all squad players dynamically for both teams
-  listA.innerHTML = allPlayers.map((p, idx) => `
-    <label class="checklist-item">
-      <input type="checkbox" name="squadA" value="${p.id}" ${idx % 2 === 0 ? 'checked' : ''}> ${escapeHTML(p.name)} (${p.role || 'Player'})
-    </label>
-  `).join('');
+  const filtered = cachedSquadPlayers.filter(p => {
+    if (!currentSquadSearch) return true;
+    const nameMatch = (p.name || '').toLowerCase().includes(currentSquadSearch);
+    const roleMatch = (p.role || '').toLowerCase().includes(currentSquadSearch);
+    return nameMatch || roleMatch;
+  });
 
-  listB.innerHTML = allPlayers.map((p, idx) => `
-    <label class="checklist-item">
-      <input type="checkbox" name="squadB" value="${p.id}" ${idx % 2 !== 0 ? 'checked' : ''}> ${escapeHTML(p.name)} (${p.role || 'Player'})
-    </label>
-  `).join('');
+  if (!filtered.length) {
+    listA.innerHTML = '<p class="muted" style="padding:8px; font-size:12px;">No matching players found.</p>';
+    listB.innerHTML = '<p class="muted" style="padding:8px; font-size:12px;">No matching players found.</p>';
+    updateSquadCounters();
+    return;
+  }
+
+  // Render Team A List
+  listA.innerHTML = filtered.map(p => {
+    const isSelected = selectedSquadA.has(p.id);
+    const isTakenByB = selectedSquadB.has(p.id);
+    const statusClass = isSelected ? 'selected-a' : isTakenByB ? 'disabled-taken' : '';
+    const metaNote = isTakenByB ? 'In Team B' : (p.battingStyle || 'Player');
+
+    return `
+      <div class="player-select-tile ${statusClass}" onclick="toggleSquadPlayer('A', '${p.id}', ${isTakenByB})">
+        <div class="player-tile-main">
+          <span class="player-custom-checkbox">${isSelected ? '✓' : ''}</span>
+          <div class="player-tile-info">
+            <span class="player-tile-name">${escapeHTML(p.name)}</span>
+            <span class="player-tile-meta">${escapeHTML(metaNote)}</span>
+          </div>
+        </div>
+        <span class="player-role-badge">${escapeHTML(p.role || 'Player')}</span>
+      </div>
+    `;
+  }).join('');
+
+  // Render Team B List
+  listB.innerHTML = filtered.map(p => {
+    const isSelected = selectedSquadB.has(p.id);
+    const isTakenByA = selectedSquadA.has(p.id);
+    const statusClass = isSelected ? 'selected-b' : isTakenByA ? 'disabled-taken' : '';
+    const metaNote = isTakenByA ? 'In Team A' : (p.battingStyle || 'Player');
+
+    return `
+      <div class="player-select-tile ${statusClass}" onclick="toggleSquadPlayer('B', '${p.id}', ${isTakenByA})">
+        <div class="player-tile-main">
+          <span class="player-custom-checkbox">${isSelected ? '✓' : ''}</span>
+          <div class="player-tile-info">
+            <span class="player-tile-name">${escapeHTML(p.name)}</span>
+            <span class="player-tile-meta">${escapeHTML(metaNote)}</span>
+          </div>
+        </div>
+        <span class="player-role-badge">${escapeHTML(p.role || 'Player')}</span>
+      </div>
+    `;
+  }).join('');
+
+  updateSquadCounters();
+}
+
+function toggleSquadPlayer(team, playerId, isTakenByOther) {
+  if (isTakenByOther) {
+    showToast(`This player is already selected in ${team === 'A' ? 'Team B' : 'Team A'}. Uncheck them first.`);
+    return;
+  }
+
+  if (team === 'A') {
+    if (selectedSquadA.has(playerId)) selectedSquadA.delete(playerId);
+    else selectedSquadA.add(playerId);
+  } else {
+    if (selectedSquadB.has(playerId)) selectedSquadB.delete(playerId);
+    else selectedSquadB.add(playerId);
+  }
+
+  renderSquadLists();
+}
+
+function quickSelectAll(team) {
+  cachedSquadPlayers.forEach(p => {
+    if (team === 'A' && !selectedSquadB.has(p.id)) selectedSquadA.add(p.id);
+    else if (team === 'B' && !selectedSquadA.has(p.id)) selectedSquadB.add(p.id);
+  });
+  renderSquadLists();
+}
+
+function quickClearAll(team) {
+  if (team === 'A') selectedSquadA.clear();
+  else selectedSquadB.clear();
+  renderSquadLists();
+}
+
+function updateSquadCounters() {
+  const badgeA = document.getElementById('countBadgeA');
+  const badgeB = document.getElementById('countBadgeB');
+  if (badgeA) {
+    badgeA.textContent = `${selectedSquadA.size} selected`;
+    badgeA.classList.toggle('ready', selectedSquadA.size >= 2);
+  }
+  if (badgeB) {
+    badgeB.textContent = `${selectedSquadB.size} selected`;
+    badgeB.classList.toggle('ready', selectedSquadB.size >= 2);
+  }
 }
 
 async function handleCreateMatchSubmit(event) {
@@ -669,26 +796,26 @@ async function handleCreateMatchSubmit(event) {
     return;
   }
 
-  const squadAChecked = Array.from(document.querySelectorAll('input[name="squadA"]:checked')).map(cb => cb.value);
-  const squadBChecked = Array.from(document.querySelectorAll('input[name="squadB"]:checked')).map(cb => cb.value);
+  const squadAIds = Array.from(selectedSquadA);
+  const squadBIds = Array.from(selectedSquadB);
 
-  if (squadAChecked.length < 2 || squadBChecked.length < 2) {
+  if (squadAIds.length < 2 || squadBIds.length < 2) {
     alert('Please select at least 2 players for each team squad.');
     return;
   }
 
-  const [allPlayers] = await Promise.all([dbGetAll('players')]);
+  const allPlayers = cachedSquadPlayers.length ? cachedSquadPlayers : await dbGetAll('players');
   
   // Duplicate check across both teams
-  const duplicateId = squadAChecked.find(id => squadBChecked.includes(id));
+  const duplicateId = squadAIds.find(id => squadBIds.includes(id));
   if (duplicateId) {
     const dupP = allPlayers.find(p => p.id === duplicateId);
     alert(`Player "${dupP ? dupP.name : 'Unknown'}" is selected in both teams. Please choose distinct players.`);
     return;
   }
 
-  const squadAPlayers = allPlayers.filter(p => squadAChecked.includes(p.id));
-  const squadBPlayers = allPlayers.filter(p => squadBChecked.includes(p.id));
+  const squadAPlayers = allPlayers.filter(p => squadAIds.includes(p.id));
+  const squadBPlayers = allPlayers.filter(p => squadBIds.includes(p.id));
 
   const tossWinner = document.getElementById('cmTossWinner').value;
   const tossDecision = document.getElementById('cmTossDecision').value;
