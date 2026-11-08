@@ -831,6 +831,82 @@ function updateSquadCounters() {
   }
 }
 
+let currentMatchFixtureMode = 'squad';
+
+function toggleMatchFixtureMode(mode) {
+  currentMatchFixtureMode = mode;
+  const squadBox = document.getElementById('squadSelectionBox');
+  if (squadBox) {
+    squadBox.style.display = (mode === 'quick') ? 'none' : 'block';
+  }
+}
+
+async function getOrCreatePlayer(name, defaultRole, targetSquadList) {
+  const cleanName = name.trim();
+  const allPlayers = await dbGetAll('players');
+
+  // Reuse existing player if matching name exists
+  let player = allPlayers.find(p => p.name.toLowerCase() === cleanName.toLowerCase());
+
+  if (!player) {
+    player = {
+      id: generateId(),
+      name: cleanName,
+      role: defaultRole,
+      battingStyle: 'Right-hand bat',
+      created: new Date().toISOString()
+    };
+    await dbPut('players', player);
+  }
+
+  // Ensure player is registered in the match squad list
+  if (targetSquadList && !targetSquadList.some(p => p.id === player.id)) {
+    targetSquadList.push(player);
+  }
+
+  return player.id;
+}
+
+async function promptAddPlayerOnTheFly(roleType) {
+  if (!activeMatch) return null;
+  const inn = activeMatch.innings[activeMatch.innings.length - 1];
+
+  const name = prompt(`Enter ${roleType} Player Name:`);
+  if (!name || !name.trim()) {
+    renderLiveScorerView();
+    return null;
+  }
+
+  const cleanName = name.trim();
+  const defaultRole = roleType.toLowerCase().includes('bowler') ? 'Bowler' : 'Batter';
+  const targetList = roleType.toLowerCase().includes('bowler') ? inn.bowlingSquad : inn.squad;
+
+  const newPlayerId = await getOrCreatePlayer(cleanName, defaultRole, targetList);
+
+  if (roleType === 'Striker') {
+    if (newPlayerId === inn.nonStrikerId) {
+      showToast('Striker and Non-Striker cannot be the same player.');
+      renderLiveScorerView();
+      return null;
+    }
+    inn.strikerId = newPlayerId;
+  } else if (roleType === 'Non-Striker') {
+    if (newPlayerId === inn.strikerId) {
+      showToast('Non-Striker and Striker cannot be the same player.');
+      renderLiveScorerView();
+      return null;
+    }
+    inn.nonStrikerId = newPlayerId;
+  } else if (roleType === 'Bowler') {
+    inn.bowlerId = newPlayerId;
+  }
+
+  await saveActiveMatch();
+  showToast(`${roleType} set to ${cleanName}`);
+  renderLiveScorerView();
+  return newPlayerId;
+}
+
 async function handleCreateMatchSubmit(event) {
   event.preventDefault();
   const teamA = document.getElementById('cmTeamA').value;
@@ -841,27 +917,7 @@ async function handleCreateMatchSubmit(event) {
     return;
   }
 
-  const squadAIds = Array.from(selectedSquadA);
-  const squadBIds = Array.from(selectedSquadB);
-
-  if (squadAIds.length < 2 || squadBIds.length < 2) {
-    alert('Please select at least 2 players for each team squad.');
-    return;
-  }
-
-  const allPlayers = cachedSquadPlayers.length ? cachedSquadPlayers : await dbGetAll('players');
-  
-  // Duplicate check across both teams
-  const duplicateId = squadAIds.find(id => squadBIds.includes(id));
-  if (duplicateId) {
-    const dupP = allPlayers.find(p => p.id === duplicateId);
-    alert(`Player "${dupP ? dupP.name : 'Unknown'}" is selected in both teams. Please choose distinct players.`);
-    return;
-  }
-
-  const squadAPlayers = allPlayers.filter(p => squadAIds.includes(p.id));
-  const squadBPlayers = allPlayers.filter(p => squadBIds.includes(p.id));
-
+  const [teams, allPlayers] = await Promise.all([dbGetAll('teams'), dbGetAll('players')]);
   const tossWinner = document.getElementById('cmTossWinner').value;
   const tossDecision = document.getElementById('cmTossDecision').value;
 
@@ -869,8 +925,36 @@ async function handleCreateMatchSubmit(event) {
   let battingTeamId = (tossWinner === teamA && tossDecision === 'bat') || (tossWinner === teamB && tossDecision === 'bowl') ? teamA : teamB;
   let bowlingTeamId = battingTeamId === teamA ? teamB : teamA;
 
-  const firstBattingSquad = battingTeamId === teamA ? squadAPlayers : squadBPlayers;
-  const firstBowlingSquad = battingTeamId === teamA ? squadBPlayers : squadAPlayers;
+  let firstBattingSquad = [];
+  let firstBowlingSquad = [];
+
+  if (currentMatchFixtureMode === 'quick') {
+    // Quick Match Mode: No squad selection required, players assigned on the spot!
+    firstBattingSquad = [];
+    firstBowlingSquad = [];
+  } else {
+    // Standard Squad Mode: Validate squads
+    const squadAIds = Array.from(selectedSquadA);
+    const squadBIds = Array.from(selectedSquadB);
+
+    if (squadAIds.length < 2 || squadBIds.length < 2) {
+      alert('Please select at least 2 players for each team squad.');
+      return;
+    }
+
+    const duplicateId = squadAIds.find(id => squadBIds.includes(id));
+    if (duplicateId) {
+      const dupP = allPlayers.find(p => p.id === duplicateId);
+      alert(`Player "${dupP ? dupP.name : 'Unknown'}" is selected in both teams. Please choose distinct players.`);
+      return;
+    }
+
+    const squadAPlayers = allPlayers.filter(p => squadAIds.includes(p.id));
+    const squadBPlayers = allPlayers.filter(p => squadBIds.includes(p.id));
+
+    firstBattingSquad = battingTeamId === teamA ? squadAPlayers : squadBPlayers;
+    firstBowlingSquad = battingTeamId === teamA ? squadBPlayers : squadAPlayers;
+  }
 
   const matchId = generateId();
   const format = document.getElementById('cmFormat').value;
@@ -882,22 +966,23 @@ async function handleCreateMatchSubmit(event) {
     bowling: bowlingTeamId,
     squad: firstBattingSquad,
     bowlingSquad: firstBowlingSquad,
-    strikerId: firstBattingSquad[0]?.id,
-    nonStrikerId: firstBattingSquad[1]?.id,
-    bowlerId: firstBowlingSquad[0]?.id,
+    strikerId: firstBattingSquad[0]?.id || null,
+    nonStrikerId: firstBattingSquad[1]?.id || null,
+    bowlerId: firstBowlingSquad[0]?.id || null,
     balls: [],
     base: { runs: 0, wickets: 0, legal: 0, ballCount: 0 }
   };
 
   const newMatch = {
     id: matchId,
-    title: document.getElementById('cmTitle').value.trim() || 'Cricket Match',
+    title: document.getElementById('cmTitle').value.trim() || (currentMatchFixtureMode === 'quick' ? 'Quick Match' : 'Cricket Match'),
     format: format,
+    fixtureType: currentMatchFixtureMode, // 'squad' or 'quick'
     a: teamA,
     b: teamB,
     overs: overs,
     date: document.getElementById('cmDate').value,
-    venue: document.getElementById('cmVenue').value || 'Home Ground',
+    venue: document.getElementById('cmVenue').value || 'Ground',
     tossWinner,
     tossDecision,
     status: 'Live',
@@ -908,7 +993,7 @@ async function handleCreateMatchSubmit(event) {
   await dbPut('matches', newMatch);
   activeMatch = newMatch;
   triggerAutoBackup();
-  showToast('Match configured! Launching Live Scorer...');
+  showToast(currentMatchFixtureMode === 'quick' ? 'Quick Match started! Set opening players on the fly.' : 'Match configured! Launching Live Scorer...');
   navigate('live-scorer');
 }
 
@@ -940,6 +1025,9 @@ async function resumeLatestLiveMatch() {
 // ==========================================
 
 async function changeStriker(newStrikerId) {
+  if (newStrikerId === '__ADD_NEW__') {
+    return promptAddPlayerOnTheFly('Striker');
+  }
   if (!activeMatch) return;
   const inn = activeMatch.innings[activeMatch.innings.length - 1];
   if (newStrikerId === inn.nonStrikerId) {
@@ -954,6 +1042,9 @@ async function changeStriker(newStrikerId) {
 }
 
 async function changeNonStriker(newNonStrikerId) {
+  if (newNonStrikerId === '__ADD_NEW__') {
+    return promptAddPlayerOnTheFly('Non-Striker');
+  }
   if (!activeMatch) return;
   const inn = activeMatch.innings[activeMatch.innings.length - 1];
   if (newNonStrikerId === inn.strikerId) {
@@ -968,6 +1059,9 @@ async function changeNonStriker(newNonStrikerId) {
 }
 
 async function changeBowler(newBowlerId) {
+  if (newBowlerId === '__ADD_NEW__') {
+    return promptAddPlayerOnTheFly('Bowler');
+  }
   if (!activeMatch) return;
   const inn = activeMatch.innings[activeMatch.innings.length - 1];
   inn.bowlerId = newBowlerId;
@@ -1126,27 +1220,33 @@ async function renderLiveScorerView() {
         <div class="crease-selector-group">
           <label>Striker (★)</label>
           <select class="crease-select striker-select" onchange="changeStriker(this.value)">
+            ${!inn.strikerId ? '<option value="" selected disabled>Select Striker</option>' : ''}
             ${availableBatters.map(p => `
               <option value="${p.id}" ${p.id === inn.strikerId ? 'selected' : ''}>★ ${escapeHTML(p.name)}</option>
             `).join('')}
+            <option value="__ADD_NEW__">＋ Type New Batter...</option>
           </select>
         </div>
 
         <div class="crease-selector-group">
           <label>Non-Striker</label>
           <select class="crease-select" onchange="changeNonStriker(this.value)">
+            ${!inn.nonStrikerId ? '<option value="" selected disabled>Select Non-Striker</option>' : ''}
             ${availableBatters.map(p => `
               <option value="${p.id}" ${p.id === inn.nonStrikerId ? 'selected' : ''}>${escapeHTML(p.name)}</option>
             `).join('')}
+            <option value="__ADD_NEW__">＋ Type New Batter...</option>
           </select>
         </div>
 
         <div class="crease-selector-group">
           <label>Current Bowler</label>
           <select class="crease-select bowler-select" onchange="changeBowler(this.value)">
+            ${!inn.bowlerId ? '<option value="" selected disabled>Select Bowler</option>' : ''}
             ${sortedBowlers.map(b => `
               <option value="${b.id}" ${b.id === inn.bowlerId ? 'selected' : ''}>⚡ ${escapeHTML(b.name)}</option>
             `).join('')}
+            <option value="__ADD_NEW__">＋ Type New Bowler...</option>
           </select>
         </div>
       </div>
@@ -1258,6 +1358,11 @@ async function recordBallEvent(runs) {
   if (!activeMatch) return;
   const inn = activeMatch.innings[activeMatch.innings.length - 1];
 
+  if (!inn.strikerId || !inn.nonStrikerId || !inn.bowlerId) {
+    alert('Please set Striker, Non-Striker, and Bowler using the dropdowns above before scoring deliveries.');
+    return;
+  }
+
   const ball = {
     id: generateId(),
     batterId: inn.strikerId,
@@ -1300,6 +1405,11 @@ async function recordExtraPrompt(extraType) {
   if (!activeMatch) return;
   const inn = activeMatch.innings[activeMatch.innings.length - 1];
 
+  if (!inn.strikerId || !inn.nonStrikerId || !inn.bowlerId) {
+    alert('Please set Striker, Non-Striker, and Bowler using the dropdowns above before scoring extras.');
+    return;
+  }
+
   let promptMsg = `Enter additional runs scored off this ${extraType.toUpperCase()} (0 if none):`;
   let additional = prompt(promptMsg, '0');
   if (additional === null) return;
@@ -1339,6 +1449,7 @@ async function recordExtraPrompt(extraType) {
 function openWicketModal() {
   if (!activeMatch) return;
   const inn = activeMatch.innings[activeMatch.innings.length - 1];
+  const available = getAvailableIncomingBatters(inn);
 
   const html = `
     <form id="wicketForm">
@@ -1363,8 +1474,8 @@ function openWicketModal() {
       <div class="form-group" style="margin-bottom:12px;">
         <label>Dismissed Batter</label>
         <select id="wfOutBatter">
-          <option value="${inn.strikerId}">Striker (${inn.squad.find(p=>p.id===inn.strikerId)?.name})</option>
-          <option value="${inn.nonStrikerId}">Non-Striker (${inn.squad.find(p=>p.id===inn.nonStrikerId)?.name})</option>
+          <option value="${inn.strikerId}">Striker (${inn.squad.find(p=>p.id===inn.strikerId)?.name || 'Unknown'})</option>
+          <option value="${inn.nonStrikerId}">Non-Striker (${inn.squad.find(p=>p.id===inn.nonStrikerId)?.name || 'Unknown'})</option>
         </select>
       </div>
 
@@ -1378,9 +1489,15 @@ function openWicketModal() {
 
       <div class="form-group">
         <label>Incoming Batter</label>
-        <select id="wfIncoming" required>
-          ${getAvailableIncomingBatters(inn).map(p => `<option value="${p.id}">${escapeHTML(p.name)}</option>`).join('')}
+        <select id="wfIncoming" onchange="toggleCustomIncomingField(this.value)">
+          ${available.map(p => `<option value="${p.id}">${escapeHTML(p.name)}</option>`).join('')}
+          <option value="__NEW__">＋ Type New Batter...</option>
         </select>
+      </div>
+
+      <div class="form-group" id="wfNewBatterGroup" style="${available.length === 0 ? 'display:block;' : 'display:none;'} margin-top:8px;">
+        <label>New Batter Name *</label>
+        <input type="text" id="wfNewBatterName" placeholder="e.g. Suresh">
       </div>
     </form>
   `;
@@ -1388,8 +1505,17 @@ function openWicketModal() {
   openModal('Record Dismissal / Wicket', html, async () => {
     const type = document.getElementById('wfType').value;
     const outBatterId = document.getElementById('wfOutBatter').value;
-    const incomingId = document.getElementById('wfIncoming').value;
+    let incomingId = document.getElementById('wfIncoming').value;
     const fielderId = document.getElementById('wfFielder').value;
+
+    if (incomingId === '__NEW__' || !incomingId) {
+      const customName = (document.getElementById('wfNewBatterName')?.value || '').trim();
+      if (!customName) {
+        showToast('Please enter incoming batter name');
+        return false;
+      }
+      incomingId = await getOrCreatePlayer(customName, 'Batter', inn.squad);
+    }
 
     const ball = {
       id: generateId(),
@@ -1420,6 +1546,11 @@ function openWicketModal() {
     renderLiveScorerView();
     return true;
   });
+}
+
+function toggleCustomIncomingField(val) {
+  const customBox = document.getElementById('wfNewBatterGroup');
+  if (customBox) customBox.style.display = (val === '__NEW__') ? 'block' : 'none';
 }
 
 function onDismissalTypeChange(val) {

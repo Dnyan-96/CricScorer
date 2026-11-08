@@ -1574,3 +1574,29 @@ body[data-theme="light"] .player-select-tile.selected-b {
   letter-spacing: 0.5px;
   margin-bottom: 8px;
 }
+
+
+/* Fixture Mode Selector Styles */
+.match-mode-selector-row {
+  display: flex;
+  gap: 12px;
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  flex-wrap: wrap;
+}
+.mode-radio-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-main);
+}
+.mode-radio-label input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}

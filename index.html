@@ -124,6 +124,21 @@
               <input type="text" id="cmTitle" required placeholder="e.g. League Semi-Final / Weekend T20">
             </div>
 
+            <!-- Fixture Mode Selector (Standard Squad vs Quick Match) -->
+            <div class="form-group col-full">
+              <label>Fixture Type</label>
+              <div class="match-mode-selector-row">
+                <label class="mode-radio-label">
+                  <input type="radio" name="matchFixtureMode" value="squad" checked onchange="toggleMatchFixtureMode(this.value)">
+                  <span><strong>Full Squad Match</strong> <small class="muted">(Pre-selected squads)</small></span>
+                </label>
+                <label class="mode-radio-label">
+                  <input type="radio" name="matchFixtureMode" value="quick" onchange="toggleMatchFixtureMode(this.value)">
+                  <span><strong style="color:var(--primary);">⚡ Quick Match</strong> <small class="muted">(On-the-spot players)</small></span>
+                </label>
+              </div>
+            </div>
+
             <div class="form-group">
               <label>Match Format</label>
               <select id="cmFormat" onchange="onFormatChange(this.value)">
