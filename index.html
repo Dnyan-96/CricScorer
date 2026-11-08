@@ -33,60 +33,67 @@
 
   <!-- Main Content Container with 9 Distinct Views -->
   <main id="mainApp">
-    <!-- VIEW 1: DASHBOARD -->
+    <!-- VIEW 1: MODERN HOME DASHBOARD -->
     <section id="dashboard" class="page active">
-      <div class="hero-banner">
-        <p class="eyebrow">MATCH CENTER & SUMMARY</p>
-        <h1>Every Match.<br>Every Ball Recorded.</h1>
-        <p class="hero-desc">Offline storage with IndexedDB. No accounts, no cloud dependencies.</p>
-        <div class="quick-cta-row">
-          <button class="btn btn-primary" onclick="navigate('create-match')">＋ New Match</button>
-          <button class="btn btn-secondary" onclick="openTeamModal()">＋ Add Team</button>
-          <button class="btn btn-secondary" onclick="openPlayerModal()">＋ Add Player</button>
-          <button class="btn btn-outline" onclick="resumeLatestLiveMatch()">Resume Live</button>
+      <!-- Dynamic Hero: Prominent Live Match Card or Matchday Launcher -->
+      <div id="dashHeroContainer">
+        <!-- Rendered dynamically by app.js -->
+      </div>
+
+      <!-- Quick Action Grid (Clean, Touch-Friendly 3-Tile Row) -->
+      <div class="dash-quick-grid">
+        <button class="dash-quick-tile primary-tile" onclick="navigate('create-match')">
+          <span class="dash-tile-icon">🏏</span>
+          <span class="dash-tile-title">Start Match</span>
+          <span class="dash-tile-sub">New fixture</span>
+        </button>
+        <button class="dash-quick-tile" onclick="openPlayerModal()">
+          <span class="dash-tile-icon">👤</span>
+          <span class="dash-tile-title">Add Player</span>
+          <span class="dash-tile-sub">Squad pool</span>
+        </button>
+        <button class="dash-quick-tile" onclick="openTeamModal()">
+          <span class="dash-tile-icon">🛡️</span>
+          <span class="dash-tile-title">Add Team</span>
+          <span class="dash-tile-sub">Roster</span>
+        </button>
+      </div>
+
+      <!-- Compact Overview Metrics Strip -->
+      <div class="dash-metrics-bar">
+        <div class="metric-pill">
+          <strong id="statTotalMatches">0</strong>
+          <span>Total Matches</span>
+        </div>
+        <div class="metric-pill">
+          <strong id="statTotalTeams">0</strong>
+          <span>Teams</span>
+        </div>
+        <div class="metric-pill">
+          <strong id="statTotalPlayers">0</strong>
+          <span>Players</span>
         </div>
       </div>
 
-      <div class="stats-counter-grid">
-        <article class="stat-card">
-          <strong id="statTotalMatches">0</strong>
-          <span>Total Matches</span>
-        </article>
-        <article class="stat-card">
-          <strong id="statLiveMatches" class="text-live">0</strong>
-          <span>Live Matches</span>
-        </article>
-        <article class="stat-card">
-          <strong id="statCompletedMatches">0</strong>
-          <span>Completed</span>
-        </article>
-        <article class="stat-card">
-          <strong id="statTotalTeams">0</strong>
-          <span>Teams</span>
-        </article>
-        <article class="stat-card">
-          <strong id="statTotalPlayers">0</strong>
-          <span>Players</span>
-        </article>
-      </div>
-
+      <!-- Recent Matches Section -->
       <div class="section-title-row">
-        <h2>Live & Recent Action</h2>
-        <button class="link-btn" onclick="navigate('history')">View all matches →</button>
+        <h2>Recent Matches</h2>
+        <button class="link-btn" onclick="navigate('history')">View all →</button>
       </div>
       <div id="dashboardMatchesList" class="stack-list empty-state">No match records found.</div>
 
+      <!-- Leaderboard Spotlight (Top Batters & Bowlers) -->
       <div class="section-title-row" style="margin-top:20px;">
         <h2>Top Performers</h2>
         <button class="link-btn" onclick="navigate('statistics')">Full stats →</button>
       </div>
       <div class="two-col-grid" id="dashboardTopPerformers">
         <div class="card mini-card">
-          <h3>🏏 Top Run Scorers</h3>
+          <div class="mini-card-header">🏏 Top Run Scorers</div>
           <div id="dashTopBatters" class="mini-list"><span class="muted">No batting data yet.</span></div>
         </div>
         <div class="card mini-card">
-          <h3>⚡ Top Wicket Takers</h3>
+          <div class="mini-card-header">⚡ Top Wicket Takers</div>
           <div id="dashTopBowlers" class="mini-list"><span class="muted">No bowling data yet.</span></div>
         </div>
       </div>

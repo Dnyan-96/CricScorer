@@ -304,43 +304,82 @@ async function renderDashboard() {
     dbGetAll('teams'), dbGetAll('players'), dbGetAll('matches')
   ]);
 
-  document.getElementById('statTotalMatches').textContent = matches.length;
-  document.getElementById('statLiveMatches').textContent = matches.filter(m => m.status === 'Live').length;
-  document.getElementById('statCompletedMatches').textContent = matches.filter(m => m.status === 'Completed').length;
-  document.getElementById('statTotalTeams').textContent = teams.length;
-  document.getElementById('statTotalPlayers').textContent = players.length;
+  // Update Summary Metrics
+  const matchCountEl = document.getElementById('statTotalMatches');
+  if (matchCountEl) matchCountEl.textContent = matches.length;
+  const teamCountEl = document.getElementById('statTotalTeams');
+  if (teamCountEl) teamCountEl.textContent = teams.length;
+  const playerCountEl = document.getElementById('statTotalPlayers');
+  if (playerCountEl) playerCountEl.textContent = players.length;
 
-  const matchesList = document.getElementById('dashboardMatchesList');
-  if (!matches.length) {
-    matchesList.className = 'stack-list empty-state';
-    matchesList.textContent = 'No matches found. Create your first match!';
-  } else {
-    matchesList.className = 'stack-list';
-    const recent = [...matches].sort((a,b) => (b.created || '').localeCompare(a.created || '')).slice(0, 5);
-    matchesList.innerHTML = recent.map(m => createMatchItemHTML(m, teams)).join('');
+  // Check for an Active Live Match
+  const liveMatch = matches.find(m => m.status === 'Live');
+  const heroContainer = document.getElementById('dashHeroContainer');
+
+  if (heroContainer) {
+    if (liveMatch) {
+      const inn = liveMatch.innings[liveMatch.innings.length - 1];
+      const stats = CricketEngine.calculateInnings(inn, inn.squad, inn.bowlingSquad);
+      const teamAName = teams.find(t => t.id === liveMatch.a)?.name || 'Team A';
+      const teamBName = teams.find(t => t.id === liveMatch.b)?.name || 'Team B';
+      const battingName = teams.find(t => t.id === inn.batting)?.name || 'Batting';
+
+      heroContainer.innerHTML = `
+        <div class="dash-live-hero">
+          <div class="dash-live-badge">Live Match in Progress</div>
+          <div class="dash-live-title">${escapeHTML(teamAName)} vs ${escapeHTML(teamBName)}</div>
+          <div class="dash-live-score">${escapeHTML(battingName)}: ${stats.totalRuns}/${stats.wickets} <span style="font-size:16px; font-weight:600; color:var(--text-muted);">(${stats.oversFormatted}/${liveMatch.overs} ov)</span></div>
+          <button class="btn btn-primary" onclick="resumeMatch('${liveMatch.id}')">Resume Scoring ⚡</button>
+        </div>
+      `;
+    } else {
+      heroContainer.innerHTML = `
+        <div class="dash-welcome-hero">
+          <div class="dash-welcome-text">
+            <h1>Match Center</h1>
+            <p>Ready for game day? Start a match or view team stats.</p>
+          </div>
+          <button class="btn btn-primary" onclick="navigate('create-match')">＋ New Match</button>
+        </div>
+      `;
+    }
   }
 
-  // Calculate quick top performers across all matches
+  // Render Recent Matches
+  const matchesList = document.getElementById('dashboardMatchesList');
+  if (matchesList) {
+    if (!matches.length) {
+      matchesList.className = 'stack-list empty-state';
+      matchesList.innerHTML = '<p>No matches recorded yet.</p><button class="btn btn-primary" style="margin-top:8px; font-size:12px;" onclick="navigate(\'create-match\')">Create First Match</button>';
+    } else {
+      matchesList.className = 'stack-list';
+      const recent = [...matches].sort((a,b) => (b.created || '').localeCompare(a.created || '')).slice(0, 4);
+      matchesList.innerHTML = recent.map(m => createMatchItemHTML(m, teams)).join('');
+    }
+  }
+
+  // Calculate Top Performers
   calculateTopPerformers(matches);
 }
 
 function createMatchItemHTML(m, teams) {
   const teamA = teams.find(t => t.id === m.a)?.name || 'Team A';
   const teamB = teams.find(t => t.id === m.b)?.name || 'Team B';
-  const statusBadge = m.status === 'Live' ? 'badge-live' : m.status === 'Completed' ? 'badge-completed' : 'badge-upcoming';
+  const isLive = m.status === 'Live';
+  const statusBadge = isLive ? 'badge-live' : m.status === 'Completed' ? 'badge-completed' : 'badge-upcoming';
 
   return `
-    <div class="match-item">
+    <div class="match-card-modern">
       <div class="item-info">
-        <h3>${escapeHTML(teamA)} vs ${escapeHTML(teamB)}</h3>
-        <p>${escapeHTML(m.title)} · ${m.overs || 20} ov · ${m.date || 'Today'} · <span class="badge ${statusBadge}">${m.status}</span></p>
-        <p style="color:var(--primary); font-weight:700; margin-top:2px;">${escapeHTML(m.result || '')}</p>
+        <div class="match-card-meta">${escapeHTML(m.date || 'Today')} · ${m.overs || 20} ov · <span class="badge ${statusBadge}">${m.status}</span></div>
+        <div class="match-card-teams">${escapeHTML(teamA)} vs ${escapeHTML(teamB)}</div>
+        <div class="match-card-result">${escapeHTML(m.result || (isLive ? 'Match in progress...' : m.title))}</div>
       </div>
       <div class="item-actions">
-        ${m.status === 'Live' ? `<button class="btn btn-primary" onclick="resumeMatch('${m.id}')">Scorer</button>` : ''}
-        ${m.status === 'Completed' ? `<button class="btn btn-secondary" onclick="viewDetailedScorecard('${m.id}')">Scorecard</button>` : ''}
-        ${m.status === 'Upcoming' ? `<button class="btn btn-primary" onclick="resumeMatch('${m.id}')">Start</button>` : ''}
-        <button class="btn btn-outline" onclick="deleteMatchPrompt('${m.id}')">Del</button>
+        ${isLive ? `<button class="btn btn-primary" style="font-size:12px; padding:6px 12px;" onclick="resumeMatch('${m.id}')">Scorer</button>` : ''}
+        ${m.status === 'Completed' ? `<button class="btn btn-secondary" style="font-size:12px; padding:6px 12px;" onclick="viewDetailedScorecard('${m.id}')">Scorecard</button>` : ''}
+        ${m.status === 'Upcoming' ? `<button class="btn btn-primary" style="font-size:12px; padding:6px 12px;" onclick="resumeMatch('${m.id}')">Start</button>` : ''}
+        <button class="btn btn-outline" style="font-size:12px; padding:6px 8px;" onclick="deleteMatchPrompt('${m.id}')">✕</button>
       </div>
     </div>
   `;
