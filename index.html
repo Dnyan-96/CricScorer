@@ -285,7 +285,10 @@
           <p class="eyebrow">RECORDS & CAREER FIGURES</p>
           <h1>Player Statistics</h1>
         </div>
-        <button class="btn btn-secondary" onclick="exportStatsCSV()">Export Stats (CSV)</button>
+        <div class="header-actions">
+          <button class="btn btn-secondary" onclick="exportStatsCSV()">Export CSV</button>
+          <button class="btn btn-primary" onclick="exportPlayerStatsPDF()">📄 Export PDF</button>
+        </div>
       </div>
 
       <div class="card" style="margin-bottom:15px;">
@@ -494,6 +497,8 @@
         <button class="btn btn-danger" onclick="confirmWipeAllData()">Delete All Local Data</button>
       </div>
     </section>
+      <!-- Printable PDF Template Container (Active during PDF export / print) -->
+    <div id="statsPdfPrintContainer" class="print-only"></div>
   </main>
 
   <!-- Bottom Mobile Navigation Bar -->

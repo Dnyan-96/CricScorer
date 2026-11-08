@@ -1793,6 +1793,181 @@ async function exportStatsCSV() {
 }
 
 // ==========================================
+// PLAYER STATISTICS PDF EXPORT ENGINE
+// ==========================================
+
+async function exportPlayerStatsPDF() {
+  if (!db) await openDatabase();
+  const [matches, players] = await Promise.all([
+    dbGetAll('matches'), dbGetAll('players')
+  ]);
+
+  if (!players.length) {
+    showToast('No players in registry to export.');
+    return;
+  }
+
+  showToast('Preparing statistics PDF...');
+
+  // Aggregate batting & bowling figures across all matches
+  const batting = {};
+  const bowling = {};
+
+  players.forEach(p => {
+    batting[p.id] = { name: p.name, role: p.role || 'Batter', inn: 0, runs: 0, balls: 0, fours: 0, sixes: 0, hs: 0, outs: 0, fifties: 0, hundreds: 0 };
+    bowling[p.id] = { name: p.name, legalBalls: 0, runs: 0, wkts: 0, maidens: 0 };
+  });
+
+  matches.forEach(m => {
+    (m.innings || []).forEach(inn => {
+      const stats = CricketEngine.calculateInnings(inn, inn.squad, inn.bowlingSquad);
+
+      // Batting breakdown
+      stats.batters.forEach(b => {
+        if (!batting[b.id]) batting[b.id] = { name: b.name, role: 'Batter', inn: 0, runs: 0, balls: 0, fours: 0, sixes: 0, hs: 0, outs: 0, fifties: 0, hundreds: 0 };
+        if (b.balls > 0 || b.isOut) {
+          batting[b.id].inn += 1;
+          batting[b.id].runs += b.runs;
+          batting[b.id].balls += b.balls;
+          batting[b.id].fours += b.fours;
+          batting[b.id].sixes += b.sixes;
+          if (b.runs > batting[b.id].hs) batting[b.id].hs = b.runs;
+          if (b.runs >= 100) batting[b.id].hundreds += 1;
+          else if (b.runs >= 50) batting[b.id].fifties += 1;
+          if (b.isOut) batting[b.id].outs += 1;
+        }
+      });
+
+      // Bowling breakdown
+      stats.bowlers.forEach(bo => {
+        if (!bowling[bo.id]) bowling[bo.id] = { name: bo.name, legalBalls: 0, runs: 0, wkts: 0, maidens: 0 };
+        bowling[bo.id].legalBalls += bo.legalBalls;
+        bowling[bo.id].runs += bo.runsConceded;
+        bowling[bo.id].wkts += bo.wickets;
+      });
+    });
+  });
+
+  const battingList = Object.values(batting)
+    .filter(b => b.inn > 0)
+    .sort((a, b) => b.runs - a.runs);
+
+  const bowlingList = Object.values(bowling)
+    .filter(bo => bo.legalBalls > 0)
+    .sort((a, b) => b.wkts - a.wkts || a.runs - b.runs);
+
+  const dateStr = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+  const pdfHTML = `
+    <div class="pdf-report-header">
+      <div>
+        <h1>🏏 CricScorer</h1>
+        <p>Complete Player Career & Season Statistics Report</p>
+      </div>
+      <div class="pdf-meta-badge">
+        <strong>Date:</strong> ${dateStr}<br>
+        <strong>Matches Analyzed:</strong> ${matches.length}<br>
+        <strong>Total Players:</strong> ${players.length}
+      </div>
+    </div>
+
+    <!-- Batting Summary Table -->
+    <div class="pdf-section-title">Batting Records</div>
+    <table class="pdf-stats-table">
+      <thead>
+        <tr>
+          <th>Player</th>
+          <th>Role</th>
+          <th class="num">Inn</th>
+          <th class="num">Runs</th>
+          <th class="num">HS</th>
+          <th class="num">Avg</th>
+          <th class="num">SR</th>
+          <th class="num">50s</th>
+          <th class="num">100s</th>
+          <th class="num">4s</th>
+          <th class="num">6s</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${battingList.length ? battingList.map(b => {
+          const avg = b.outs > 0 ? (b.runs / b.outs).toFixed(1) : b.runs.toFixed(1);
+          const sr = b.balls > 0 ? ((b.runs / b.balls) * 100).toFixed(1) : '0.0';
+          return `
+            <tr>
+              <td><strong>${escapeHTML(b.name)}</strong></td>
+              <td>${escapeHTML(b.role)}</td>
+              <td class="num">${b.inn}</td>
+              <td class="num"><strong>${b.runs}</strong></td>
+              <td class="num">${b.hs}</td>
+              <td class="num">${avg}</td>
+              <td class="num">${sr}</td>
+              <td class="num">${b.fifties}</td>
+              <td class="num">${b.hundreds}</td>
+              <td class="num">${b.fours}</td>
+              <td class="num">${b.sixes}</td>
+            </tr>
+          `;
+        }).join('') : '<tr><td colspan="11" style="text-align:center; padding:12px;">No batting records logged yet.</td></tr>'}
+      </tbody>
+    </table>
+
+    <!-- Bowling Summary Table -->
+    <div class="pdf-section-title">Bowling Records</div>
+    <table class="pdf-stats-table">
+      <thead>
+        <tr>
+          <th>Bowler</th>
+          <th class="num">Overs</th>
+          <th class="num">Runs</th>
+          <th class="num">Wkts</th>
+          <th class="num">Econ</th>
+          <th class="num">Avg</th>
+          <th class="num">SR</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${bowlingList.length ? bowlingList.map(bo => {
+          const fullOvers = Math.floor(bo.legalBalls / 6);
+          const remBalls = bo.legalBalls % 6;
+          const oversFormatted = `${fullOvers}.${remBalls}`;
+          const oversDec = bo.legalBalls / 6;
+          const econ = oversDec > 0 ? (bo.runs / oversDec).toFixed(2) : '0.00';
+          const avg = bo.wkts > 0 ? (bo.runs / bo.wkts).toFixed(1) : '--';
+          const sr = bo.wkts > 0 ? (bo.legalBalls / bo.wkts).toFixed(1) : '--';
+          return `
+            <tr>
+              <td><strong>${escapeHTML(bo.name)}</strong></td>
+              <td class="num">${oversFormatted}</td>
+              <td class="num">${bo.runs}</td>
+              <td class="num"><strong>${bo.wkts}</strong></td>
+              <td class="num">${econ}</td>
+              <td class="num">${avg}</td>
+              <td class="num">${sr}</td>
+            </tr>
+          `;
+        }).join('') : '<tr><td colspan="7" style="text-align:center; padding:12px;">No bowling records logged yet.</td></tr>'}
+      </tbody>
+    </table>
+
+    <div class="pdf-footer">
+      <span>Generated by CricScorer (Local & Offline)</span>
+      <span>Page 1 of 1</span>
+    </div>
+  `;
+
+  const container = document.getElementById('statsPdfPrintContainer');
+  if (container) {
+    container.innerHTML = pdfHTML;
+  }
+
+  setTimeout(() => {
+    window.print();
+  }, 250);
+}
+
+
+// ==========================================
 // 11. BACKUP, RESTORE & AUDIT LOGS
 // ==========================================
 
