@@ -464,6 +464,7 @@ async function openTeamModal(teamId = null) {
       });
       showToast('New team created');
     }
+    triggerAutoBackup();
     renderTeams();
     renderDashboard();
     return true;
@@ -576,6 +577,7 @@ async function openPlayerModal(playerId = null) {
       });
       showToast('Player added to squad pool');
     }
+    triggerAutoBackup();
     renderPlayers();
     renderDashboard();
     return true;
@@ -866,6 +868,7 @@ async function handleCreateMatchSubmit(event) {
 
   await dbPut('matches', newMatch);
   activeMatch = newMatch;
+  triggerAutoBackup();
   showToast('Match configured! Launching Live Scorer...');
   navigate('live-scorer');
 }
@@ -1503,6 +1506,7 @@ async function finishMatchPrompt() {
   activeMatch.result = resultStr;
 
   await saveActiveMatch();
+  triggerAutoBackup();
   showToast('Match marked as Completed.');
   navigate('history');
 }
@@ -1510,6 +1514,7 @@ async function finishMatchPrompt() {
 async function saveActiveMatch() {
   if (activeMatch) {
     await dbPut('matches', activeMatch);
+    triggerAutoBackup();
   }
 }
 
@@ -1791,6 +1796,97 @@ async function exportStatsCSV() {
 // 11. BACKUP, RESTORE & AUDIT LOGS
 // ==========================================
 
+// ==========================================
+// IN-APP AUTO BACKUP ENGINE
+// ==========================================
+
+const AUTO_BACKUP_KEY = 'CricScorer_AutoBackup_Vault';
+let autoBackupDebounceTimer = null;
+
+function triggerAutoBackup() {
+  clearTimeout(autoBackupDebounceTimer);
+  autoBackupDebounceTimer = setTimeout(async () => {
+    try {
+      if (!db) return;
+      const settings = await dbGetAll('settings');
+      const isEnabled = settings.find(s => s.key === 'autoBackupEnabled')?.val;
+      if (isEnabled === false) return; // Enabled by default unless explicitly disabled
+
+      const [teams, players, matches] = await Promise.all([
+        dbGetAll('teams'), dbGetAll('players'), dbGetAll('matches')
+      ]);
+
+      const snapshot = {
+        app: 'CricScorer',
+        schemaVersion: 2,
+        snapshotAt: new Date().toISOString(),
+        teams,
+        players,
+        matches,
+        summary: {
+          teamsCount: teams.length,
+          playersCount: players.length,
+          matchesCount: matches.length
+        }
+      };
+
+      await dbPut('settings', { key: AUTO_BACKUP_KEY, val: snapshot });
+      await dbPut('settings', { key: 'autoBackupLastRun', val: snapshot.snapshotAt });
+      updateAutoBackupDisplay(snapshot);
+      console.log('[AutoBackup] Local recovery snapshot created at', snapshot.snapshotAt);
+    } catch (err) {
+      console.warn('[AutoBackup] Background snapshot error:', err);
+    }
+  }, 800);
+}
+
+async function toggleAutoBackupPreference(enabled) {
+  await saveAppSetting('autoBackupEnabled', enabled);
+  if (enabled) {
+    triggerAutoBackup();
+    showToast('Auto Backup enabled');
+  } else {
+    showToast('Auto Backup paused');
+  }
+}
+
+async function restoreFromAutoBackupVault() {
+  try {
+    if (!db) await openDatabase();
+    const settings = await dbGetAll('settings');
+    const vaultItem = settings.find(s => s.key === AUTO_BACKUP_KEY);
+
+    if (!vaultItem || !vaultItem.val) {
+      alert('No auto-backup snapshot found in the local vault yet.');
+      return;
+    }
+
+    const data = vaultItem.val;
+    const dateFormatted = new Date(data.snapshotAt).toLocaleString();
+    const promptMsg = `Restore auto snapshot from ${dateFormatted}?\n\nContains: ${data.teams.length} teams, ${data.players.length} players, ${data.matches.length} matches. Existing data will be merged.`;
+
+    if (!confirm(promptMsg)) return;
+
+    for (const t of (data.teams || [])) await dbPut('teams', t);
+    for (const p of (data.players || [])) await dbPut('players', p);
+    for (const m of (data.matches || [])) await dbPut('matches', m);
+
+    showToast('Restored from Auto Backup snapshot!');
+    renderDashboard();
+    renderSettings();
+  } catch (err) {
+    alert('Could not restore auto backup: ' + err.message);
+  }
+}
+
+function updateAutoBackupDisplay(snapshot) {
+  const timeEl = document.getElementById('autoBackupTimestampText');
+  if (timeEl && snapshot && snapshot.snapshotAt) {
+    const d = new Date(snapshot.snapshotAt);
+    timeEl.textContent = `Last snapshot: ${d.toLocaleDateString()} at ${d.toLocaleTimeString()} (${snapshot.matches?.length || 0} matches, ${snapshot.players?.length || 0} players)`;
+  }
+}
+
 async function exportFullDatabaseJSON() {
   const [teams, players, matches, settings] = await Promise.all([
     dbGetAll('teams'), dbGetAll('players'), dbGetAll('matches'), dbGetAll('settings')
@@ -2056,6 +2152,16 @@ async function renderSettings() {
   const capSelect = document.getElementById('settingBowlerCap');
   if (capSelect && bowlerCap) capSelect.value = bowlerCap;
 
+  // Sync Auto Backup Toggle & Display
+  const autoBackupPref = settings.find(s => s.key === 'autoBackupEnabled')?.val;
+  const autoBackupSwitch = document.getElementById('settingAutoBackup');
+  if (autoBackupSwitch) autoBackupSwitch.checked = (autoBackupPref !== false);
+
+  const vaultData = settings.find(s => s.key === AUTO_BACKUP_KEY)?.val;
+  if (vaultData) {
+    updateAutoBackupDisplay(vaultData);
+  }
+
   inspectStorageQuota();
 }
 
@@ -2077,6 +2183,7 @@ document.addEventListener('DOMContentLoaded', () => {
     .then(async () => {
       await loadSavedSettings();
       renderDashboard();
+      triggerAutoBackup();
     })
     .catch((err) => {
       console.error('Database launch error:', err);

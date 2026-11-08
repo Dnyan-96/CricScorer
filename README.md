@@ -2,27 +2,29 @@
 
 **Professional Offline-First Cricket Scoring & Scorecard Management PWA**
 
-## Updates in this release (v2.6):
-- **Alphabetical Player Sorting (A–Z):**
-  - **Player Registry:** Sorted alphabetically from A to Z.
-  - **Match Squad Selection:** Team A and Team B card selection tiles listed alphabetically.
-  - **Live Scoreboard Dropdowns:** Striker, Non-Striker, and Bowler selectors sorted alphabetically.
-  - **In-Game Modals:** Incoming batter selection and Change Bowler modal lists sorted alphabetically.
+## Updates in this release (v2.7):
+- **In-App Auto Backup Vault:**
+  - Automatically captures recovery snapshots into local IndexedDB storage (`CricScorer_AutoBackup_Vault`).
+  - Triggers in the background on match saves, completed matches, delivery tracking, and squad updates.
+  - One-tap "Restore Snapshot" button directly in Settings.
+  - Manual JSON Export, File Restore, and Clear Data options remain completely unchanged.
+- **Alphabetical Sorting (A–Z):**
+  - Player registry, match squad selection, live crease dropdowns, and dismissal modals sorted alphabetically.
 - **Card-Based Squad Selection UI:**
-  - Responsive player tiles with cross-team conflict prevention (`(In Team A)` / `(In Team B)`).
-  - Real-time search filter and quick "All" / "Clear" squad actions.
-- **Independent Squad Pool:** Register players without being locked into a team.
-- **Scorecard Contrast Fix:** High-contrast scorecard digits in Light mode (deep green `#0b3b2e`) and Dark mode (clean white `#ffffff`).
-- **Backup & Restore in Settings:** Direct access to JSON Export, Restore, and Clear Data in the Settings menu.
-- **Screen Wake Lock & Haptics:** Screen stay-awake during scoring and tactile feedback on touches, boundaries, and wickets.
-- **Minimal Icon:** Clean vector cricket ball icon (`icon.svg`).
+  - Conflict prevention tiles (`(In Team A)` / `(In Team B)`), live search filtering, and squad counters.
+- **Independent Squad Pool:**
+  - Register players without forced team associations; dynamically assign playing XIs on match day.
+- **Scorecard Contrast:**
+  - Dynamic high-contrast digits for both Light (`#0b3b2e`) and Dark (`#ffffff`) modes.
+- **Screen Wake Lock & Haptics:**
+  - Screen stay-awake during live matches and tactile vibration feedback.
 
 ## Deploy to GitHub Pages:
 1. Extract all 7 files directly into the root folder of your GitHub repository.
 2. Commit and push:
    ```bash
    git add .
-   git commit -m "CricScorer v2.6: alphabetical player sorting across registry, squads, and live dropdowns"
+   git commit -m "CricScorer v2.7: in-app local auto backup vault with one-tap restore"
    git push origin main
    ```
 3. Once deployed, open your GitHub Pages link in Chrome on Android.

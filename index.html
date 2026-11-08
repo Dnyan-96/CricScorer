@@ -416,6 +416,26 @@
       <div class="settings-group">
         <div class="settings-group-title">🔄 Backup & Restore</div>
         <div class="card">
+          <!-- In-App Auto Backup Status & Control -->
+          <div class="setting-item">
+            <div>
+              <strong>In-App Auto Backup</strong>
+              <p class="muted" id="autoBackupStatusText">Creates a local recovery snapshot after match updates.</p>
+            </div>
+            <label class="switch" aria-label="Toggle Auto Backup">
+              <input type="checkbox" id="settingAutoBackup" onchange="toggleAutoBackupPreference(this.checked)" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="setting-item" id="autoBackupActionRow">
+            <div>
+              <strong>Latest Local Snapshot</strong>
+              <p class="muted" id="autoBackupTimestampText">No snapshot created yet.</p>
+            </div>
+            <button type="button" class="btn btn-secondary" style="font-size:12px; padding:6px 12px;" onclick="restoreFromAutoBackupVault()">Restore Snapshot</button>
+          </div>
+
           <div class="setting-item">
             <div>
               <strong>Export Database Backup</strong>
