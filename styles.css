@@ -1600,3 +1600,16 @@ body[data-theme="light"] .player-select-tile.selected-b {
   accent-color: var(--primary);
   cursor: pointer;
 }
+
+
+/* Multi-Filter Layout for Statistics */
+.stats-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+@media (max-width: 650px) {
+  .stats-filter-grid {
+    grid-template-columns: 1fr;
+  }
+}

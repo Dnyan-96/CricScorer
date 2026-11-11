@@ -134,6 +134,46 @@ function escapeHTML(str = '') {
 // 2. CRICKET SCORING CALCULATION ENGINE
 // ==========================================
 
+// ==========================================
+// DISMISSAL NOTATION FORMATTER
+// ==========================================
+
+function formatDismissalText(btr, bowlersMap = {}, fieldersMap = {}) {
+  if (!btr || !btr.isOut) return 'not out';
+
+  const blrName = btr.dismissalBowlerId ? (bowlersMap[btr.dismissalBowlerId] || 'Bowler') : '';
+  const fdrName = btr.dismissalFielderId ? (fieldersMap[btr.dismissalFielderId] || 'Fielder') : '';
+
+  switch (btr.dismissal) {
+    case 'bowled':
+      return `b ${blrName}`;
+    case 'caught':
+      return (fdrName && fdrName !== blrName) ? `c ${fdrName} b ${blrName}` : `c & b ${blrName}`;
+    case 'caughtAndBowled':
+      return `c & b ${blrName}`;
+    case 'lbw':
+      return `lbw b ${blrName}`;
+    case 'stumped':
+      return fdrName ? `st †${fdrName} b ${blrName}` : `st b ${blrName}`;
+    case 'runOut':
+      return fdrName ? `run out (${fdrName})` : 'run out';
+    case 'hitWicket':
+      return `hit wicket b ${blrName}`;
+    case 'retiredHurt':
+      return 'retired not out';
+    case 'retiredOut':
+      return 'retired out';
+    case 'obstructingTheField':
+      return 'obstructing the field';
+    case 'hitBallTwice':
+      return 'hit ball twice';
+    case 'timedOut':
+      return 'timed out';
+    default:
+      return btr.dismissal || 'out';
+  }
+}
+
 class CricketEngine {
   /**
    * Replays all deliveries in an innings to compute batting, bowling, fall of wickets, extras, and total.
@@ -219,15 +259,20 @@ class CricketEngine {
       const deliveryTotal = (ball.batRuns || 0) + extraCount;
       totalRuns += deliveryTotal;
 
-      // Wickets
+      // Wickets & Dismissals (including Retired Hurt / Out)
       if (ball.wicket && ball.dismissal !== 'none') {
         const outPlayerId = ball.wicketPlayerId || strikerId;
         const outPlayer = batters[outPlayerId] || btr;
-        outPlayer.isOut = true;
+        outPlayer.isOut = (ball.dismissal !== 'retiredHurt');
         outPlayer.dismissal = ball.dismissal;
         outPlayer.dismissalInfo = ball.dismissalDetails || null;
+        outPlayer.dismissalBowlerId = bowlerId;
+        outPlayer.dismissalFielderId = ball.dismissalDetails?.fielderId || null;
 
-        totalWickets += 1;
+        // Retired Hurt does not increment team total wickets
+        if (ball.dismissal !== 'retiredHurt') {
+          totalWickets += 1;
+        }
 
         // Credit to bowler only if dismissal type allows it
         const bowlerCredited = ['bowled', 'caught', 'caughtAndBowled', 'lbw', 'stumped', 'hitWicket'];
@@ -320,6 +365,8 @@ async function renderDashboard() {
     if (liveMatch) {
       const inn = liveMatch.innings[liveMatch.innings.length - 1];
       const stats = CricketEngine.calculateInnings(inn, inn.squad, inn.bowlingSquad);
+        const playersMap = {};
+        (allPlayers || []).forEach(p => { playersMap[p.id] = p.name; });
       const teamAName = teams.find(t => t.id === liveMatch.a)?.name || 'Team A';
       const teamBName = teams.find(t => t.id === liveMatch.b)?.name || 'Team B';
       const battingName = teams.find(t => t.id === inn.batting)?.name || 'Batting';
@@ -1410,29 +1457,60 @@ async function recordExtraPrompt(extraType) {
     return;
   }
 
-  let promptMsg = `Enter additional runs scored off this ${extraType.toUpperCase()} (0 if none):`;
-  let additional = prompt(promptMsg, '0');
-  if (additional === null) return;
-  let addRuns = parseInt(additional, 10) || 0;
+  let addRuns = 0;
 
-  let compExtra = (extraType === 'wide' || extraType === 'noBall') ? 1 : 0;
-  let totalExtra = compExtra + addRuns;
+  if (extraType === 'wide') {
+    const input = prompt(
+      "Wide Ball Options:\n" +
+      "Enter additional bye/overthrow runs:\n" +
+      "0 = Standard 1 Wide (1 run, re-bowled)\n" +
+      "1 = Wide + 1 run (2 runs total)\n" +
+      "2 = Wide + 2 runs (3 runs total)\n" +
+      "3 = Wide + 3 runs (4 runs total)\n" +
+      "4 = Wide to Boundary (5 runs total)",
+      "0"
+    );
+    if (input === null) return;
+    addRuns = parseInt(input, 10) || 0;
+  } else if (extraType === 'noBall') {
+    const input = prompt(
+      "No Ball Options:\n" +
+      "Enter runs scored off the bat or byes off this No Ball:\n" +
+      "0 = Standard 1 No Ball (1 run penalty)\n" +
+      "1 = No Ball + 1 run (2 runs total)\n" +
+      "4 = No Ball + Four (5 runs total)\n" +
+      "6 = No Ball + Six (7 runs total)",
+      "0"
+    );
+    if (input === null) return;
+    addRuns = parseInt(input, 10) || 0;
+  } else {
+    let promptMsg = `Enter runs scored off this ${extraType.toUpperCase()} (0 if none):`;
+    let additional = prompt(promptMsg, '0');
+    if (additional === null) return;
+    addRuns = parseInt(additional, 10) || 0;
+  }
+
+  const isWideOrNb = (extraType === 'wide' || extraType === 'noBall');
+  const compExtra = isWideOrNb ? 1 : 0;
+  const totalExtra = compExtra + addRuns;
 
   const ball = {
     id: generateId(),
     batterId: inn.strikerId,
     nonStrikerId: inn.nonStrikerId,
     bowlerId: inn.bowlerId,
-    batRuns: 0,
+    batRuns: (extraType === 'noBall' && (addRuns === 4 || addRuns === 6)) ? addRuns : 0,
     extraType: extraType,
-    extraRuns: addRuns,
-    extraTotal: totalExtra,
+    extraRuns: (extraType === 'noBall' && (addRuns === 4 || addRuns === 6)) ? 0 : addRuns,
+    extraTotal: (extraType === 'noBall' && (addRuns === 4 || addRuns === 6)) ? compExtra : totalExtra,
     wicket: false,
     dismissal: 'none',
     timestamp: Date.now()
   };
 
   inn.balls.push(ball);
+  triggerHaptic('normal');
 
   // Check strike rotation for byes/leg-byes/wides on odd additional runs
   if (addRuns % 2 !== 0) {
@@ -1450,21 +1528,22 @@ function openWicketModal() {
   if (!activeMatch) return;
   const inn = activeMatch.innings[activeMatch.innings.length - 1];
   const available = getAvailableIncomingBatters(inn);
+  const fielders = inn.bowlingSquad || [];
 
   const html = `
     <form id="wicketForm">
       <div class="form-group" style="margin-bottom:12px;">
         <label>Dismissal Type</label>
         <select id="wfType" onchange="onDismissalTypeChange(this.value)">
-          <option value="bowled">Bowled</option>
           <option value="caught">Caught</option>
-          <option value="caughtAndBowled">Caught & Bowled</option>
+          <option value="bowled">Bowled</option>
+          <option value="runOut">Run Out</option>
           <option value="lbw">LBW</option>
           <option value="stumped">Stumped</option>
-          <option value="runOut">Run Out</option>
+          <option value="caughtAndBowled">Caught & Bowled</option>
           <option value="hitWicket">Hit Wicket</option>
-          <option value="retiredHurt">Retired Hurt</option>
-          <option value="retiredOut">Retired Out</option>
+          <option value="retiredHurt">Retired Hurt (No Ball Consumed)</option>
+          <option value="retiredOut">Retired Out (No Ball Consumed)</option>
           <option value="obstructingTheField">Obstructing the Field</option>
           <option value="hitBallTwice">Hit the Ball Twice</option>
           <option value="timedOut">Timed Out</option>
@@ -1474,17 +1553,24 @@ function openWicketModal() {
       <div class="form-group" style="margin-bottom:12px;">
         <label>Dismissed Batter</label>
         <select id="wfOutBatter">
-          <option value="${inn.strikerId}">Striker (${inn.squad.find(p=>p.id===inn.strikerId)?.name || 'Unknown'})</option>
-          <option value="${inn.nonStrikerId}">Non-Striker (${inn.squad.find(p=>p.id===inn.nonStrikerId)?.name || 'Unknown'})</option>
+          <option value="${inn.strikerId}">Striker (${inn.squad.find(p => p.id === inn.strikerId)?.name || 'Striker'})</option>
+          <option value="${inn.nonStrikerId}">Non-Striker (${inn.squad.find(p => p.id === inn.nonStrikerId)?.name || 'Non-Striker'})</option>
         </select>
       </div>
 
-      <div class="form-group" id="wfFielderGroup" style="display:none; margin-bottom:12px;">
-        <label>Fielder Involved</label>
-        <select id="wfFielder">
-          <option value="">None / Unknown</option>
-          ${inn.bowlingSquad.map(p => `<option value="${p.id}">${escapeHTML(p.name)}</option>`).join('')}
+      <!-- Fielder selection -->
+      <div class="form-group" id="wfFielderGroup" style="display:block; margin-bottom:12px;">
+        <label id="wfFielderLabel">Fielder / Catcher</label>
+        <select id="wfFielder" onchange="onFielderSelectChange(this.value)">
+          <option value="">Unknown / None</option>
+          ${fielders.map(p => `<option value="${p.id}">${escapeHTML(p.name)}</option>`).join('')}
+          <option value="__NEW_FIELDER__">＋ Type Fielder Name...</option>
         </select>
+      </div>
+
+      <div class="form-group" id="wfCustomFielderWrap" style="display:none; margin-bottom:12px;">
+        <label>New Fielder Name</label>
+        <input type="text" id="wfCustomFielderName" placeholder="e.g. Jadeja">
       </div>
 
       <div class="form-group">
@@ -1506,7 +1592,12 @@ function openWicketModal() {
     const type = document.getElementById('wfType').value;
     const outBatterId = document.getElementById('wfOutBatter').value;
     let incomingId = document.getElementById('wfIncoming').value;
-    const fielderId = document.getElementById('wfFielder').value;
+    let fielderId = document.getElementById('wfFielder')?.value;
+
+    if (fielderId === '__NEW_FIELDER__') {
+      const customFielder = (document.getElementById('wfCustomFielderName')?.value || '').trim();
+      fielderId = customFielder ? await getOrCreatePlayer(customFielder, 'Bowler', inn.bowlingSquad) : null;
+    }
 
     if (incomingId === '__NEW__' || !incomingId) {
       const customName = (document.getElementById('wfNewBatterName')?.value || '').trim();
@@ -1515,6 +1606,26 @@ function openWicketModal() {
         return false;
       }
       incomingId = await getOrCreatePlayer(customName, 'Batter', inn.squad);
+    }
+
+    // RETIRED OUT / RETIRED HURT: Switch batter without consuming a delivery
+    if (type === 'retiredHurt' || type === 'retiredOut') {
+      const outBtr = inn.squad.find(p => p.id === outBatterId);
+      if (outBtr) {
+        outBtr.isOut = (type === 'retiredOut');
+        outBtr.dismissal = type;
+      }
+
+      if (inn.strikerId === outBatterId) {
+        inn.strikerId = incomingId;
+      } else {
+        inn.nonStrikerId = incomingId;
+      }
+
+      showToast(type === 'retiredHurt' ? 'Batter retired hurt (no ball counted)' : 'Batter retired out');
+      await saveActiveMatch();
+      renderLiveScorerView();
+      return true;
     }
 
     const ball = {
@@ -1526,7 +1637,7 @@ function openWicketModal() {
       extraType: null,
       extraRuns: 0,
       extraTotal: 0,
-      wicket: type !== 'retiredHurt',
+      wicket: true,
       dismissal: type,
       wicketPlayerId: outBatterId,
       dismissalDetails: { fielderId },
@@ -1534,8 +1645,8 @@ function openWicketModal() {
     };
 
     inn.balls.push(ball);
+    triggerHaptic('wicket');
 
-    // Replace out batter with incoming
     if (inn.strikerId === outBatterId) {
       inn.strikerId = incomingId;
     } else {
@@ -1548,14 +1659,28 @@ function openWicketModal() {
   });
 }
 
-function toggleCustomIncomingField(val) {
-  const customBox = document.getElementById('wfNewBatterGroup');
-  if (customBox) customBox.style.display = (val === '__NEW__') ? 'block' : 'none';
+function onFielderSelectChange(val) {
+  const wrap = document.getElementById('wfCustomFielderWrap');
+  if (wrap) wrap.style.display = (val === '__NEW_FIELDER__') ? 'block' : 'none';
 }
 
 function onDismissalTypeChange(val) {
   const fg = document.getElementById('wfFielderGroup');
-  if (fg) fg.style.display = (val === 'caught' || val === 'runOut' || val === 'stumped') ? 'block' : 'none';
+  const label = document.getElementById('wfFielderLabel');
+  if (!fg) return;
+
+  if (val === 'caught') {
+    fg.style.display = 'block';
+    if (label) label.textContent = 'Catcher Name';
+  } else if (val === 'runOut') {
+    fg.style.display = 'block';
+    if (label) label.textContent = 'Fielder Affecting Run-Out';
+  } else if (val === 'stumped') {
+    fg.style.display = 'block';
+    if (label) label.textContent = 'Wicket-Keeper / Fielder';
+  } else {
+    fg.style.display = 'none';
+  }
 }
 
 function getAvailableIncomingBatters(inn) {
@@ -1758,7 +1883,7 @@ async function viewDetailedScorecard(matchId) {
               <tbody>
                 ${stats.batters.map(b => `
                   <tr>
-                    <td>${escapeHTML(b.name)} <small class="muted">(${b.dismissal})</small></td>
+                    <td>${escapeHTML(b.name)}<br><small class="muted">${formatDismissalText(b, playersMap, playersMap)}</small></td>
                     <td><strong>${b.runs}</strong></td>
                     <td>${b.balls}</td>
                     <td>${b.fours}</td>
@@ -1811,61 +1936,157 @@ async function deleteMatchPrompt(matchId) {
 }
 
 // ==========================================
-// 10. STATISTICS MODULE
+// 10. STATISTICS MODULE (MULTI-FILTER ENGINE)
 // ==========================================
+
+let cachedStatsTeams = [];
+let cachedStatsMatches = [];
 
 function switchStatsTab(tab) {
   currentStatsTab = tab;
-  document.getElementById('btnStatsBatting').classList.toggle('active', tab === 'batting');
-  document.getElementById('btnStatsBowling').classList.toggle('active', tab === 'bowling');
-  document.getElementById('btnStatsFielding').classList.toggle('active', tab === 'fielding');
+  document.getElementById('btnStatsBatting')?.classList.toggle('active', tab === 'batting');
+  document.getElementById('btnStatsBowling')?.classList.toggle('active', tab === 'bowling');
+  document.getElementById('btnStatsFielding')?.classList.toggle('active', tab === 'fielding');
   renderStatistics();
 }
 
-async function renderStatistics() {
-  const [matches, players] = await Promise.all([dbGetAll('matches'), dbGetAll('players')]);
+async function populateStatsFilterDropdowns(teams, matches) {
+  cachedStatsTeams = teams;
+  cachedStatsMatches = matches;
+
+  const teamSelect = document.getElementById('statsTeamFilter');
+  const matchSelect = document.getElementById('statsMatchFilter');
+
+  if (teamSelect && teamSelect.options.length <= 1) {
+    teams.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      opt.textContent = t.name;
+      teamSelect.appendChild(opt);
+    });
+  }
+
+  if (matchSelect && matchSelect.options.length <= 1) {
+    matches.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m.id;
+      const tA = teams.find(t => t.id === m.a)?.name || 'Team A';
+      const tB = teams.find(t => t.id === m.b)?.name || 'Team B';
+      opt.textContent = `${tA} vs ${tB} (${m.date || 'Match'})`;
+      matchSelect.appendChild(opt);
+    });
+  }
+}
+
+function onStatsFilterChange(changedFilter) {
+  if (changedFilter === 'match') {
+    const matchId = document.getElementById('statsMatchFilter')?.value;
+    if (matchId) {
+      const match = cachedStatsMatches.find(m => m.id === matchId);
+      const teamSelect = document.getElementById('statsTeamFilter');
+      if (match && teamSelect && teamSelect.value && teamSelect.value !== match.a && teamSelect.value !== match.b) {
+        teamSelect.value = '';
+      }
+    }
+  }
+  renderStatistics();
+}
+
+function getFilteredStatsMatches(matches) {
   const formatFilter = document.getElementById('statsFormatFilter')?.value || '';
-  const container = document.getElementById('statsTableContainer');
+  const teamFilter = document.getElementById('statsTeamFilter')?.value || '';
+  const matchFilter = document.getElementById('statsMatchFilter')?.value || '';
 
-  const filteredMatches = matches.filter(m => !formatFilter || m.format === formatFilter);
+  return matches.filter(m => {
+    const matchFormat = !formatFilter || m.format === formatFilter;
+    const matchTeam = !teamFilter || m.a === teamFilter || m.b === teamFilter;
+    const matchSpecific = !matchFilter || m.id === matchFilter;
+    return matchFormat && matchTeam && matchSpecific;
+  });
+}
 
+function computePlayerFigures(matches, players) {
   const battingStats = {};
   const bowlingStats = {};
   const fieldingStats = {};
 
   players.forEach(p => {
-    battingStats[p.id] = { name: p.name, innings: 0, runs: 0, balls: 0, fours: 0, sixes: 0, highest: 0, outs: 0 };
-    bowlingStats[p.id] = { name: p.name, legalBalls: 0, runs: 0, wickets: 0 };
-    fieldingStats[p.id] = { name: p.name, catches: 0, runOuts: 0, stumpings: 0 };
+    battingStats[p.id] = { id: p.id, name: p.name, role: p.role || 'Batter', innings: 0, runs: 0, balls: 0, fours: 0, sixes: 0, highest: 0, outs: 0, fifties: 0, hundreds: 0 };
+    bowlingStats[p.id] = { id: p.id, name: p.name, role: p.role || 'Bowler', legalBalls: 0, runs: 0, wickets: 0 };
+    fieldingStats[p.id] = { id: p.id, name: p.name, role: p.role || 'Player', catches: 0, runOuts: 0, stumpings: 0, totalDismissals: 0 };
   });
 
-  filteredMatches.forEach(m => {
+  matches.forEach(m => {
     (m.innings || []).forEach(inn => {
       const stats = CricketEngine.calculateInnings(inn, inn.squad, inn.bowlingSquad);
-      
+
       // Batting
       stats.batters.forEach(b => {
-        if (!battingStats[b.id]) battingStats[b.id] = { name: b.name, innings: 0, runs: 0, balls: 0, fours: 0, sixes: 0, highest: 0, outs: 0 };
+        if (!battingStats[b.id]) {
+          battingStats[b.id] = { id: b.id, name: b.name, role: 'Batter', innings: 0, runs: 0, balls: 0, fours: 0, sixes: 0, highest: 0, outs: 0, fifties: 0, hundreds: 0 };
+        }
         if (b.balls > 0 || b.isOut) {
-          battingStats[b.id].innings += 1;
-          battingStats[b.id].runs += b.runs;
-          battingStats[b.id].balls += b.balls;
-          battingStats[b.id].fours += b.fours;
-          battingStats[b.id].sixes += b.sixes;
-          if (b.runs > battingStats[b.id].highest) battingStats[b.id].highest = b.runs;
-          if (b.isOut) battingStats[b.id].outs += 1;
+          const bs = battingStats[b.id];
+          bs.innings += 1;
+          bs.runs += b.runs;
+          bs.balls += b.balls;
+          bs.fours += b.fours;
+          bs.sixes += b.sixes;
+          if (b.runs > bs.highest) bs.highest = b.runs;
+          if (b.runs >= 100) bs.hundreds += 1;
+          else if (b.runs >= 50) bs.fifties += 1;
+          if (b.isOut) bs.outs += 1;
         }
       });
 
       // Bowling
       stats.bowlers.forEach(bo => {
-        if (!bowlingStats[bo.id]) bowlingStats[bo.id] = { name: bo.name, legalBalls: 0, runs: 0, wickets: 0 };
-        bowlingStats[bo.id].legalBalls += bo.legalBalls;
-        bowlingStats[bo.id].runs += bo.runsConceded;
-        bowlingStats[bo.id].wickets += bo.wickets;
+        if (!bowlingStats[bo.id]) {
+          bowlingStats[bo.id] = { id: bo.id, name: bo.name, role: 'Bowler', legalBalls: 0, runs: 0, wickets: 0 };
+        }
+        const bl = bowlingStats[bo.id];
+        bl.legalBalls += bo.legalBalls;
+        bl.runs += bo.runsConceded;
+        bl.wickets += bo.wickets;
+      });
+
+      // Fielding
+      (inn.balls || []).forEach(ball => {
+        if (ball.wicket && ball.dismissalDetails?.fielderId) {
+          const fid = ball.dismissalDetails.fielderId;
+          if (!fieldingStats[fid]) {
+            fieldingStats[fid] = { id: fid, name: 'Fielder', role: 'Fielder', catches: 0, runOuts: 0, stumpings: 0, totalDismissals: 0 };
+          }
+          const fs = fieldingStats[fid];
+          if (ball.dismissal === 'caught') fs.catches += 1;
+          else if (ball.dismissal === 'runOut') fs.runOuts += 1;
+          else if (ball.dismissal === 'stumped') fs.stumpings += 1;
+          fs.totalDismissals += 1;
+        }
       });
     });
   });
+
+  return { battingStats, bowlingStats, fieldingStats };
+}
+
+async function renderStatistics() {
+  const [matches, players, teams] = await Promise.all([
+    dbGetAll('matches'), dbGetAll('players'), dbGetAll('teams')
+  ]);
+
+  await populateStatsFilterDropdowns(teams, matches);
+
+  const container = document.getElementById('statsTableContainer');
+  if (!container) return;
+
+  const filteredMatches = getFilteredStatsMatches(matches);
+  const { battingStats, bowlingStats, fieldingStats } = computePlayerFigures(filteredMatches, players);
+
+  if (!filteredMatches.length) {
+    container.innerHTML = '<p class="muted" style="padding:18px; text-align:center;">No matches found matching the selected filters.</p>';
+    return;
+  }
 
   if (currentStatsTab === 'batting') {
     const list = Object.values(battingStats).filter(b => b.innings > 0).sort((a,b) => b.runs - a.runs);
@@ -1884,7 +2105,7 @@ async function renderStatistics() {
           </tr>
         </thead>
         <tbody>
-          ${list.map(b => {
+          ${list.length ? list.map(b => {
             const avg = b.outs > 0 ? (b.runs / b.outs).toFixed(1) : b.runs.toFixed(1);
             const sr = b.balls > 0 ? ((b.runs / b.balls) * 100).toFixed(1) : '0.0';
             return `
@@ -1899,7 +2120,7 @@ async function renderStatistics() {
                 <td>${b.sixes}</td>
               </tr>
             `;
-          }).join('')}
+          }).join('') : '<tr><td colspan="8" style="text-align:center; padding:12px;">No batting records for this filter.</td></tr>'}
         </tbody>
       </table>
     `;
@@ -1933,98 +2154,88 @@ async function renderStatistics() {
                 <td>${avg}</td>
               </tr>
             `;
-          }).join('')}
+          }).join('') : '<tr><td colspan="6" style="text-align:center; padding:12px;">No bowling records for this filter.</td></tr>'}
         </tbody>
       </table>
     `;
   } else {
-    container.innerHTML = `<p class="muted" style="padding:16px;">Fielding catches and run-out tracking summary populated from scorecards.</p>`;
+    const list = Object.values(fieldingStats).filter(f => f.totalDismissals > 0).sort((a,b) => b.totalDismissals - a.totalDismissals);
+    container.innerHTML = `
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th>Catches</th>
+            <th>Run Outs</th>
+            <th>Stumpings</th>
+            <th>Total Dismissals</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${list.length ? list.map(f => `
+            <tr>
+              <td><strong>${escapeHTML(f.name)}</strong></td>
+              <td>${f.catches}</td>
+              <td>${f.runOuts}</td>
+              <td>${f.stumpings}</td>
+              <td><strong>${f.totalDismissals}</strong></td>
+            </tr>
+          `).join('') : '<tr><td colspan="5" style="text-align:center; padding:12px;">No fielding dismissals recorded for this filter.</td></tr>'}
+        </tbody>
+      </table>
+    `;
   }
 }
 
 async function exportStatsCSV() {
   const [players, matches] = await Promise.all([dbGetAll('players'), dbGetAll('matches')]);
-  let csv = 'Player,Innings,Runs,Balls,Fours,Sixes\n';
-  players.forEach(p => {
-    let r = 0, b = 0, f = 0, s = 0, innCount = 0;
-    matches.forEach(m => {
-      (m.innings || []).forEach(inn => {
-        const stats = CricketEngine.calculateInnings(inn);
-        const found = stats.batters.find(x => x.id === p.id);
-        if (found && (found.balls > 0 || found.isOut)) {
-          innCount++;
-          r += found.runs; b += found.balls; f += found.fours; s += found.sixes;
-        }
-      });
-    });
-    csv += `"${p.name}",${innCount},${r},${b},${f},${s}\n`;
-  });
-  triggerDownload(csv, `CricScorer_Stats_${Date.now()}.csv`, 'text/csv');
-}
+  const filteredMatches = getFilteredStatsMatches(matches);
+  const { battingStats } = computePlayerFigures(filteredMatches, players);
 
-// ==========================================
-// PLAYER STATISTICS PDF EXPORT ENGINE
-// ==========================================
+  let csv = 'Player,Role,Innings,Runs,Balls,Highest,Average,StrikeRate,Fours,Sixes\n';
+  Object.values(battingStats).filter(b => b.innings > 0).forEach(b => {
+    const avg = b.outs > 0 ? (b.runs / b.outs).toFixed(1) : b.runs.toFixed(1);
+    const sr = b.balls > 0 ? ((b.runs / b.balls) * 100).toFixed(1) : '0.0';
+    csv += `"${b.name}","${b.role}",${b.innings},${b.runs},${b.balls},${b.highest},${avg},${sr},${b.fours},${b.sixes}\n`;
+  });
+
+  triggerDownload(csv, `CricScorer_Filtered_Stats_${Date.now()}.csv`, 'text/csv');
+}
 
 async function exportPlayerStatsPDF() {
   if (!db) await openDatabase();
-  const [matches, players] = await Promise.all([
-    dbGetAll('matches'), dbGetAll('players')
+  const [matches, players, teams] = await Promise.all([
+    dbGetAll('matches'), dbGetAll('players'), dbGetAll('teams')
   ]);
 
-  if (!players.length) {
-    showToast('No players in registry to export.');
+  const filteredMatches = getFilteredStatsMatches(matches);
+  if (!filteredMatches.length) {
+    showToast('No matching records to export as PDF.');
     return;
   }
 
-  showToast('Preparing statistics PDF...');
+  showToast('Preparing filtered statistics PDF...');
+  const { battingStats, bowlingStats } = computePlayerFigures(filteredMatches, players);
 
-  // Aggregate batting & bowling figures across all matches
-  const batting = {};
-  const bowling = {};
+  const battingList = Object.values(battingStats).filter(b => b.innings > 0).sort((a,b) => b.runs - a.runs);
+  const bowlingList = Object.values(bowlingStats).filter(b => b.legalBalls > 0).sort((a,b) => b.wickets - a.wickets);
 
-  players.forEach(p => {
-    batting[p.id] = { name: p.name, role: p.role || 'Batter', inn: 0, runs: 0, balls: 0, fours: 0, sixes: 0, hs: 0, outs: 0, fifties: 0, hundreds: 0 };
-    bowling[p.id] = { name: p.name, legalBalls: 0, runs: 0, wkts: 0, maidens: 0 };
-  });
+  const teamVal = document.getElementById('statsTeamFilter')?.value;
+  const matchVal = document.getElementById('statsMatchFilter')?.value;
+  const formatVal = document.getElementById('statsFormatFilter')?.value;
 
-  matches.forEach(m => {
-    (m.innings || []).forEach(inn => {
-      const stats = CricketEngine.calculateInnings(inn, inn.squad, inn.bowlingSquad);
-
-      // Batting breakdown
-      stats.batters.forEach(b => {
-        if (!batting[b.id]) batting[b.id] = { name: b.name, role: 'Batter', inn: 0, runs: 0, balls: 0, fours: 0, sixes: 0, hs: 0, outs: 0, fifties: 0, hundreds: 0 };
-        if (b.balls > 0 || b.isOut) {
-          batting[b.id].inn += 1;
-          batting[b.id].runs += b.runs;
-          batting[b.id].balls += b.balls;
-          batting[b.id].fours += b.fours;
-          batting[b.id].sixes += b.sixes;
-          if (b.runs > batting[b.id].hs) batting[b.id].hs = b.runs;
-          if (b.runs >= 100) batting[b.id].hundreds += 1;
-          else if (b.runs >= 50) batting[b.id].fifties += 1;
-          if (b.isOut) batting[b.id].outs += 1;
-        }
-      });
-
-      // Bowling breakdown
-      stats.bowlers.forEach(bo => {
-        if (!bowling[bo.id]) bowling[bo.id] = { name: bo.name, legalBalls: 0, runs: 0, wkts: 0, maidens: 0 };
-        bowling[bo.id].legalBalls += bo.legalBalls;
-        bowling[bo.id].runs += bo.runsConceded;
-        bowling[bo.id].wkts += bo.wickets;
-      });
-    });
-  });
-
-  const battingList = Object.values(batting)
-    .filter(b => b.inn > 0)
-    .sort((a, b) => b.runs - a.runs);
-
-  const bowlingList = Object.values(bowling)
-    .filter(bo => bo.legalBalls > 0)
-    .sort((a, b) => b.wkts - a.wkts || a.runs - b.runs);
+  let filterLabel = 'All Fixtures';
+  if (matchVal) {
+    const mObj = matches.find(m => m.id === matchVal);
+    const tA = teams.find(t => t.id === mObj?.a)?.name || 'Team A';
+    const tB = teams.find(t => t.id === mObj?.b)?.name || 'Team B';
+    filterLabel = `Match: ${tA} vs ${tB}`;
+  } else if (teamVal) {
+    const tObj = teams.find(t => t.id === teamVal);
+    filterLabel = `Team: ${tObj?.name || 'Selected Team'}`;
+  } else if (formatVal) {
+    filterLabel = `Format: ${formatVal}`;
+  }
 
   const dateStr = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
@@ -2032,17 +2243,16 @@ async function exportPlayerStatsPDF() {
     <div class="pdf-report-header">
       <div>
         <h1>🏏 CricScorer</h1>
-        <p>Complete Player Career & Season Statistics Report</p>
+        <p><strong>${escapeHTML(filterLabel)}</strong> — Performance & Records Summary</p>
       </div>
       <div class="pdf-meta-badge">
         <strong>Date:</strong> ${dateStr}<br>
-        <strong>Matches Analyzed:</strong> ${matches.length}<br>
-        <strong>Total Players:</strong> ${players.length}
+        <strong>Matches Included:</strong> ${filteredMatches.length}<br>
+        <strong>Active Players:</strong> ${battingList.length}
       </div>
     </div>
 
-    <!-- Batting Summary Table -->
-    <div class="pdf-section-title">Batting Records</div>
+    <div class="pdf-section-title">Batting Figures</div>
     <table class="pdf-stats-table">
       <thead>
         <tr>
@@ -2067,9 +2277,9 @@ async function exportPlayerStatsPDF() {
             <tr>
               <td><strong>${escapeHTML(b.name)}</strong></td>
               <td>${escapeHTML(b.role)}</td>
-              <td class="num">${b.inn}</td>
+              <td class="num">${b.innings}</td>
               <td class="num"><strong>${b.runs}</strong></td>
-              <td class="num">${b.hs}</td>
+              <td class="num">${b.highest}</td>
               <td class="num">${avg}</td>
               <td class="num">${sr}</td>
               <td class="num">${b.fifties}</td>
@@ -2078,12 +2288,11 @@ async function exportPlayerStatsPDF() {
               <td class="num">${b.sixes}</td>
             </tr>
           `;
-        }).join('') : '<tr><td colspan="11" style="text-align:center; padding:12px;">No batting records logged yet.</td></tr>'}
+        }).join('') : '<tr><td colspan="11" style="text-align:center; padding:12px;">No batting records logged.</td></tr>'}
       </tbody>
     </table>
 
-    <!-- Bowling Summary Table -->
-    <div class="pdf-section-title">Bowling Records</div>
+    <div class="pdf-section-title">Bowling Figures</div>
     <table class="pdf-stats-table">
       <thead>
         <tr>
@@ -2093,7 +2302,6 @@ async function exportPlayerStatsPDF() {
           <th class="num">Wkts</th>
           <th class="num">Econ</th>
           <th class="num">Avg</th>
-          <th class="num">SR</th>
         </tr>
       </thead>
       <tbody>
@@ -2103,25 +2311,23 @@ async function exportPlayerStatsPDF() {
           const oversFormatted = `${fullOvers}.${remBalls}`;
           const oversDec = bo.legalBalls / 6;
           const econ = oversDec > 0 ? (bo.runs / oversDec).toFixed(2) : '0.00';
-          const avg = bo.wkts > 0 ? (bo.runs / bo.wkts).toFixed(1) : '--';
-          const sr = bo.wkts > 0 ? (bo.legalBalls / bo.wkts).toFixed(1) : '--';
+          const avg = bo.wickets > 0 ? (bo.runs / bo.wickets).toFixed(1) : '--';
           return `
             <tr>
               <td><strong>${escapeHTML(bo.name)}</strong></td>
               <td class="num">${oversFormatted}</td>
               <td class="num">${bo.runs}</td>
-              <td class="num"><strong>${bo.wkts}</strong></td>
+              <td class="num"><strong>${bo.wickets}</strong></td>
               <td class="num">${econ}</td>
               <td class="num">${avg}</td>
-              <td class="num">${sr}</td>
             </tr>
           `;
-        }).join('') : '<tr><td colspan="7" style="text-align:center; padding:12px;">No bowling records logged yet.</td></tr>'}
+        }).join('') : '<tr><td colspan="6" style="text-align:center; padding:12px;">No bowling records logged.</td></tr>'}
       </tbody>
     </table>
 
     <div class="pdf-footer">
-      <span>Generated by CricScorer (Local & Offline)</span>
+      <span>Generated by CricScorer (Filtered Export)</span>
       <span>Page 1 of 1</span>
     </div>
   `;
@@ -2135,7 +2341,6 @@ async function exportPlayerStatsPDF() {
     window.print();
   }, 250);
 }
-
 
 // ==========================================
 // 11. BACKUP, RESTORE & AUDIT LOGS

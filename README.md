@@ -2,17 +2,22 @@
 
 **Professional Offline-First Cricket Scoring & Scorecard Management PWA**
 
-## Updates in this release (v2.10):
-- **⚡ Quick Match Mode (Random / Street Teams with Ad-hoc Players):**
-  - **Match Creation Toggle:** Switch between **Full Squad Match** (standard pre-selected squads) and **Quick Match** (zero squad selection needed).
-  - **On-the-Spot Player Enrollment:** Select or type Striker, Non-Striker, and Bowler directly on the live crease without prior registration.
-  - **Smart Player Name Reuse:** Typing a player name automatically links to an existing profile if already saved in the database, preventing duplicates.
-  - **Ad-hoc Wicket Dismissals:** Supports typing a brand-new incoming batter on the fly when wickets fall.
-  - **Scoring Guard Rails:** Clear alerts guiding the scorer to assign active crease players before logging deliveries.
+## Updates in this release (v2.11):
+- **Team-Wise & Match-Wise Statistics Filtering:**
+  - Multi-filter toolbar in the Statistics tab: filter by **Format**, **Team**, and individual **Match Fixture**.
+  - Dynamic **Fielding Records** tab tracking Catches, Run-Outs, and Stumpings credited to fielders.
+  - Targeted CSV export and custom-titled PDF reports reflecting active filters (e.g. *Team: Royal Challengers* or *Match: Team A vs Team B*).
+- **Live Scorecard & Dismissal Upgrades:**
+  - **Fielder Attribution:** Dedicated field and `＋ Type Fielder Name...` option for Caught, Run-Out, and Stumped dismissals.
+  - **Standard Cricket Notation:** Clean representations (`c [Fielder] b [Bowler]`, `c & b [Bowler]`, `run out ([Fielder])`, `st †[Fielder] b [Bowler]`).
+  - **Delivery-Free Retired Hurt / Out:** Batter substitutions without burning legal deliveries or adding phantom balls.
+  - **Enhanced Wide / No-Ball Presets:** Fast additional bye/run entry (`0`, `1`, `2`, `4`) with automatic strike rotation on odd runs.
+- **⚡ Quick Match Mode:**
+  - Ad-hoc match fixtures with on-the-spot player enrollment directly on the live crease.
 - **Modernized & Simplified Home Dashboard:**
   - Dynamic live match hero with instant "Resume Scoring ⚡" button, 3-tile quick actions, and clean overview metrics.
 - **Player Statistics PDF Export:**
-  - One-tap "📄 Export PDF" in the Statistics tab with career batting & bowling tables (100% offline via native `@media print`).
+  - Complete career batting & bowling tables generated offline via native `@media print`.
 - **In-App Auto Backup Vault:**
   - Automatic background recovery snapshots into IndexedDB (`CricScorer_AutoBackup_Vault`) with one-tap restore in Settings.
 - **Universal Alphabetical Sorting (A–Z):**
@@ -31,7 +36,7 @@
 2. Commit and push:
    ```bash
    git add .
-   git commit -m "CricScorer v2.10: Quick Match mode with on-the-spot player enrollment"
+   git commit -m "CricScorer v2.11: team and match stats filters, live scorecard dismissals, and fielder tracking"
    git push origin main
    ```
 3. Once deployed, open your GitHub Pages link in Chrome on Android.
