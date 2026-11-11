@@ -365,8 +365,6 @@ async function renderDashboard() {
     if (liveMatch) {
       const inn = liveMatch.innings[liveMatch.innings.length - 1];
       const stats = CricketEngine.calculateInnings(inn, inn.squad, inn.bowlingSquad);
-        const playersMap = {};
-        (Players || []).forEach(p => { playersMap[p.id] = p.name; });
       const teamAName = teams.find(t => t.id === liveMatch.a)?.name || 'Team A';
       const teamBName = teams.find(t => t.id === liveMatch.b)?.name || 'Team B';
       const battingName = teams.find(t => t.id === inn.batting)?.name || 'Batting';
@@ -397,7 +395,7 @@ async function renderDashboard() {
   if (matchesList) {
     if (!matches.length) {
       matchesList.className = 'stack-list empty-state';
-      matchesList.innerHTML = '<p>No matches recorded yet.</p><button class="btn btn-primary" style="margin-top:8px; font-size:12px;" onclick="navigate(\'create-match\')">Create First Match</button>';
+      matchesList.innerHTML = `<p>No matches recorded yet.</p><button class="btn btn-primary" style="margin-top:8px; font-size:12px;" onclick="navigate('create-match')">Create First Match</button>`;
     } else {
       matchesList.className = 'stack-list';
       const recent = [...matches].sort((a,b) => (b.created || '').localeCompare(a.created || '')).slice(0, 4);
@@ -1843,8 +1841,8 @@ async function renderHistory() {
 
 async function viewDetailedScorecard(matchId) {
   const [matches, teams, players] = await Promise.all([
-    dbGetAll('matches'), 
-    dbGetAll('teams'), 
+    dbGetAll('matches'),
+    dbGetAll('teams'),
     dbGetAll('players')
   ]);
   const m = matches.find(x => x.id === matchId);
