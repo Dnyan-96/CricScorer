@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cricscorer-v2.12';
+const CACHE_NAME = 'cricscorer-v2.10-rollback';
 const ASSETS = [
   './',
   './index.html',
