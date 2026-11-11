@@ -366,7 +366,7 @@ async function renderDashboard() {
       const inn = liveMatch.innings[liveMatch.innings.length - 1];
       const stats = CricketEngine.calculateInnings(inn, inn.squad, inn.bowlingSquad);
         const playersMap = {};
-        (allPlayers || []).forEach(p => { playersMap[p.id] = p.name; });
+        (Players || []).forEach(p => { playersMap[p.id] = p.name; });
       const teamAName = teams.find(t => t.id === liveMatch.a)?.name || 'Team A';
       const teamBName = teams.find(t => t.id === liveMatch.b)?.name || 'Team B';
       const battingName = teams.find(t => t.id === inn.batting)?.name || 'Batting';
