@@ -1842,9 +1842,16 @@ async function renderHistory() {
 }
 
 async function viewDetailedScorecard(matchId) {
-  const [matches, teams] = await Promise.all([dbGetAll('matches'), dbGetAll('teams')]);
+  const [matches, teams, players] = await Promise.all([
+    dbGetAll('matches'), 
+    dbGetAll('teams'), 
+    dbGetAll('players')
+  ]);
   const m = matches.find(x => x.id === matchId);
   if (!m) return;
+
+  const playersMap = {};
+  (players || []).forEach(p => { playersMap[p.id] = p.name; });
 
   const teamAName = teams.find(t => t.id === m.a)?.name || 'Team A';
   const teamBName = teams.find(t => t.id === m.b)?.name || 'Team B';
