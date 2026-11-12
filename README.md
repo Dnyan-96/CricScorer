@@ -2,31 +2,27 @@
 
 **Professional Offline-First Cricket Scoring & Scorecard Management PWA**
 
-## Clean Rollback Build (v2.10 Stable):
-- Reverted all experimental dismissal and multi-filter changes to restore full functionality.
+## Updates in this release (v2.13):
+- **Team-Wise & Match-Wise Statistics Filtering:**
+  - Three synchronized filters in the Statistics tab: **Format**, **Team**, and individual **Match Fixture**.
+  - Dynamic **Fielding Records** tab tracking Catches, Run-Outs, and Stumpings credited to fielders.
+  - Targeted CSV export and custom-titled PDF reports reflecting active filters (e.g. *Team: Royal Challengers* or *Match: Team A vs Team B*).
+- **Live Scorecard & Dismissal Upgrades:**
+  - **Fielder Attribution:** Fielder dropdown and inline `＋ Type Fielder Name...` option for Caught, Run-Out, and Stumped dismissals.
+  - **Standard Cricket Notation:** Clean representations (`c [Fielder] b [Bowler]`, `c & b [Bowler]`, `run out ([Fielder])`, `st †[Fielder] b [Bowler]`).
+  - **Delivery-Free Retired Hurt / Out:** Batter substitutions at the crease without consuming legal deliveries or charging the bowler.
+  - **Enhanced Wide / No-Ball Presets:** Fast additional bye/run entry (`0`, `1`, `2`, `4`) with automatic strike rotation on odd runs.
 - **⚡ Quick Match Mode:**
-  - Ad-hoc match fixtures with on-the-spot player enrollment directly on the live crease without prior squad registration.
-- **Modern Simplified Home Dashboard:**
-  - Dynamic live match hero with live score updates, 3-tile quick actions (**Start Match**, **Add Player**, **Add Team**), and clean overview metrics.
-- **Player Statistics PDF Export:**
-  - One-tap "📄 Export PDF" in the Statistics tab with career batting & bowling tables (100% offline via native `@media print`).
-- **In-App Auto Backup Vault:**
-  - Automatic background recovery snapshots into IndexedDB (`CricScorer_AutoBackup_Vault`) with one-tap restore in Settings.
-- **Universal Alphabetical Sorting (A–Z):**
-  - Universal alphabetical sorting across player registry, match squads, and live crease dropdowns.
-- **Card-Based Squad Selection UI:**
-  - Interactive player tiles with cross-team conflict prevention (`(In Team A)` / `(In Team B)`), live search filter, and squad counters.
-- **Independent Squad Pool:**
-  - Central player registry without forced team associations.
-- **Screen Wake Lock & Haptics:**
-  - Screen stay-awake during live matches and tactile vibration feedback.
+  - Ad-hoc match fixtures with on-the-spot player enrollment directly on the live crease.
+- **Modernized Home Dashboard & Auto Backup Vault:**
+  - Clean dashboard with active match hero, 3-tile quick actions, and automatic background IndexedDB snapshots.
 
 ## Deploy to GitHub Pages:
 1. Extract all 7 files directly into the root folder of your GitHub repository.
 2. Commit and push:
    ```bash
    git add .
-   git commit -m "Rollback to stable v2.10: restored working scoring, dashboard, and quick match"
+   git commit -m "CricScorer v2.13: team/match stats filters, fielder tracking, and delivery-free retired out"
    git push origin main
    ```
 3. Once deployed, open your GitHub Pages link in Chrome on Android.

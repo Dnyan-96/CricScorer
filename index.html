@@ -314,14 +314,22 @@
       </div>
 
       <div class="card" style="margin-bottom:15px;">
-        <div class="filter-bar" style="margin:0;">
-          <select id="statsFormatFilter" onchange="renderStatistics()">
+        <div class="filter-bar stats-filter-grid" style="margin:0;">
+          <select id="statsFormatFilter" onchange="onStatsFilterChange('format')">
             <option value="">All Formats</option>
             <option value="T20">T20</option>
             <option value="T10">T10</option>
             <option value="ODI">ODI</option>
             <option value="Test">Test</option>
             <option value="Custom">Custom</option>
+          </select>
+
+          <select id="statsTeamFilter" onchange="onStatsFilterChange('team')">
+            <option value="">All Teams</option>
+          </select>
+
+          <select id="statsMatchFilter" onchange="onStatsFilterChange('match')">
+            <option value="">All Matches</option>
           </select>
         </div>
       </div>
