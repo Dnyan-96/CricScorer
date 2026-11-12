@@ -290,6 +290,48 @@ class CricketEngine {
       }
     });
 
+    // Compute Maiden Overs (6 legal deliveries in an over with 0 bowler-conceded runs)
+    const bowlerOverMap = {};
+    balls.forEach(ball => {
+      if (!ball.bowlerId) return;
+      const isWide = ball.extraType === 'wide';
+      const isNoBall = ball.extraType === 'noBall';
+      const isBye = ball.extraType === 'bye';
+      const isLegBye = ball.extraType === 'legBye';
+      const isPenalty = ball.extraType === 'penalty';
+      const isLegal = !isWide && !isNoBall && !isPenalty;
+      const extraCount = ball.extraTotal || (ball.extraRuns + (isWide || isNoBall ? 1 : 0)) || 0;
+
+      if (!bowlerOverMap[ball.bowlerId]) {
+        bowlerOverMap[ball.bowlerId] = { legalInCurrentOver: 0, runsInCurrentOver: 0, maidens: 0 };
+      }
+      const tracker = bowlerOverMap[ball.bowlerId];
+
+      // Runs charged to bowler (byes/leg-byes/penalties do NOT spoil a maiden)
+      if (isWide || isNoBall) {
+        tracker.runsInCurrentOver += (ball.batRuns || 0) + extraCount;
+      } else if (!isBye && !isLegBye && !isPenalty) {
+        tracker.runsInCurrentOver += (ball.batRuns || 0);
+      }
+
+      if (isLegal) {
+        tracker.legalInCurrentOver += 1;
+        if (tracker.legalInCurrentOver === 6) {
+          if (tracker.runsInCurrentOver === 0) {
+            tracker.maidens += 1;
+          }
+          tracker.legalInCurrentOver = 0;
+          tracker.runsInCurrentOver = 0;
+        }
+      }
+    });
+
+    Object.entries(bowlerOverMap).forEach(([bId, data]) => {
+      if (bowlers[bId]) {
+        bowlers[bId].maidens = data.maidens;
+      }
+    });
+
     // Compute Strike Rates
     Object.values(batters).forEach(b => {
       b.strikeRate = b.balls > 0 ? ((b.runs / b.balls) * 100).toFixed(1) : '0.0';
@@ -916,40 +958,47 @@ async function promptAddPlayerOnTheFly(roleType) {
   if (!activeMatch) return null;
   const inn = activeMatch.innings[activeMatch.innings.length - 1];
 
-  const name = prompt(`Enter ${roleType} Player Name:`);
-  if (!name || !name.trim()) {
+  const html = `
+    <div class="form-group">
+      <label>${escapeHTML(roleType)} Full Name *</label>
+      <input type="text" id="quickOnFlyPlayerName" placeholder="e.g. Hardik Pandya" autofocus>
+    </div>
+  `;
+
+  openModal(`Add ${roleType} On The Fly`, html, async () => {
+    const cleanName = (document.getElementById('quickOnFlyPlayerName')?.value || '').trim();
+    if (!cleanName) {
+      showToast('Please enter a player name');
+      return false;
+    }
+
+    const defaultRole = roleType.toLowerCase().includes('bowler') ? 'Bowler' : 'Batter';
+    const targetList = roleType.toLowerCase().includes('bowler') ? inn.bowlingSquad : inn.squad;
+    const newPlayerId = await getOrCreatePlayer(cleanName, defaultRole, targetList);
+
+    if (roleType === 'Striker') {
+      if (newPlayerId === inn.nonStrikerId) {
+        showToast('Striker and Non-Striker cannot be the same player.');
+        renderLiveScorerView();
+        return false;
+      }
+      inn.strikerId = newPlayerId;
+    } else if (roleType === 'Non-Striker') {
+      if (newPlayerId === inn.strikerId) {
+        showToast('Non-Striker and Striker cannot be the same player.');
+        renderLiveScorerView();
+        return false;
+      }
+      inn.nonStrikerId = newPlayerId;
+    } else if (roleType === 'Bowler') {
+      inn.bowlerId = newPlayerId;
+    }
+
+    await saveActiveMatch();
+    showToast(`${roleType} set to ${cleanName}`);
     renderLiveScorerView();
-    return null;
-  }
-
-  const cleanName = name.trim();
-  const defaultRole = roleType.toLowerCase().includes('bowler') ? 'Bowler' : 'Batter';
-  const targetList = roleType.toLowerCase().includes('bowler') ? inn.bowlingSquad : inn.squad;
-
-  const newPlayerId = await getOrCreatePlayer(cleanName, defaultRole, targetList);
-
-  if (roleType === 'Striker') {
-    if (newPlayerId === inn.nonStrikerId) {
-      showToast('Striker and Non-Striker cannot be the same player.');
-      renderLiveScorerView();
-      return null;
-    }
-    inn.strikerId = newPlayerId;
-  } else if (roleType === 'Non-Striker') {
-    if (newPlayerId === inn.strikerId) {
-      showToast('Non-Striker and Striker cannot be the same player.');
-      renderLiveScorerView();
-      return null;
-    }
-    inn.nonStrikerId = newPlayerId;
-  } else if (roleType === 'Bowler') {
-    inn.bowlerId = newPlayerId;
-  }
-
-  await saveActiveMatch();
-  showToast(`${roleType} set to ${cleanName}`);
-  renderLiveScorerView();
-  return newPlayerId;
+    return true;
+  });
 }
 
 async function handleCreateMatchSubmit(event) {
@@ -1377,10 +1426,10 @@ async function renderLiveScorerView() {
       </div>
 
       <div class="keypad-grid-extras">
-        <button class="key-touch extra-key" onclick="recordExtraPrompt('wide')">WD</button>
-        <button class="key-touch extra-key" onclick="recordExtraPrompt('noBall')">NB</button>
-        <button class="key-touch extra-key" onclick="recordExtraPrompt('bye')">BYE</button>
-        <button class="key-touch extra-key" onclick="recordExtraPrompt('legBye')">LB</button>
+        <button class="key-touch extra-key" onclick="openExtraModal('wide')">WD</button>
+        <button class="key-touch extra-key" onclick="openExtraModal('noBall')">NB</button>
+        <button class="key-touch extra-key" onclick="openExtraModal('bye')">BYE</button>
+        <button class="key-touch extra-key" onclick="openExtraModal('legBye')">LB</button>
         <button class="key-touch wicket" onclick="openWicketModal()">WICKET</button>
       </div>
 
@@ -1391,6 +1440,7 @@ async function renderLiveScorerView() {
       </div>
 
       <div class="aux-controls-row" style="margin-top:6px;">
+        <button class="btn btn-secondary" onclick="viewDetailedScorecard(activeMatch.id)">📋 Scorecard</button>
         <button class="btn btn-secondary" onclick="endInningsPrompt()">End Innings</button>
         <button class="btn btn-primary" onclick="finishMatchPrompt()">Finish Match</button>
       </div>
@@ -1445,80 +1495,165 @@ async function recordBallEvent(runs) {
   renderLiveScorerView();
 }
 
-// Extras Prompt
-async function recordExtraPrompt(extraType) {
+// Modern Extras Modal (WD, NB, BYE, LB)
+let selectedExtraAddRuns = 0;
+let selectedNbRunSource = 'bat'; // 'bat' or 'bye'
+
+function openExtraModal(extraType) {
   if (!activeMatch) return;
   const inn = activeMatch.innings[activeMatch.innings.length - 1];
 
   if (!inn.strikerId || !inn.nonStrikerId || !inn.bowlerId) {
-    alert('Please set Striker, Non-Striker, and Bowler using the dropdowns above before scoring extras.');
+    showToast('Set Striker, Non-Striker, and Bowler first.');
     return;
   }
 
-  let addRuns = 0;
+  selectedExtraAddRuns = 0;
+  selectedNbRunSource = 'bat';
 
-  if (extraType === 'wide') {
-    const input = prompt(
-      "Wide Ball Options:\n" +
-      "Enter additional bye/overthrow runs:\n" +
-      "0 = Standard 1 Wide (1 run, re-bowled)\n" +
-      "1 = Wide + 1 run (2 runs total)\n" +
-      "2 = Wide + 2 runs (3 runs total)\n" +
-      "3 = Wide + 3 runs (4 runs total)\n" +
-      "4 = Wide to Boundary (5 runs total)",
-      "0"
-    );
-    if (input === null) return;
-    addRuns = parseInt(input, 10) || 0;
-  } else if (extraType === 'noBall') {
-    const input = prompt(
-      "No Ball Options:\n" +
-      "Enter runs scored off the bat or byes off this No Ball:\n" +
-      "0 = Standard 1 No Ball (1 run penalty)\n" +
-      "1 = No Ball + 1 run (2 runs total)\n" +
-      "4 = No Ball + Four (5 runs total)\n" +
-      "6 = No Ball + Six (7 runs total)",
-      "0"
-    );
-    if (input === null) return;
-    addRuns = parseInt(input, 10) || 0;
-  } else {
-    let promptMsg = `Enter additional runs scored off this ${extraType.toUpperCase()} (0 if none):`;
-    let additional = prompt(promptMsg, '0');
-    if (additional === null) return;
-    addRuns = parseInt(additional, 10) || 0;
-  }
-
-  const isWideOrNb = (extraType === 'wide' || extraType === 'noBall');
-  const compExtra = isWideOrNb ? 1 : 0;
-  const totalExtra = compExtra + addRuns;
-
-  const ball = {
-    id: generateId(),
-    batterId: inn.strikerId,
-    nonStrikerId: inn.nonStrikerId,
-    bowlerId: inn.bowlerId,
-    batRuns: (extraType === 'noBall' && (addRuns === 4 || addRuns === 6)) ? addRuns : 0,
-    extraType: extraType,
-    extraRuns: (extraType === 'noBall' && (addRuns === 4 || addRuns === 6)) ? 0 : addRuns,
-    extraTotal: (extraType === 'noBall' && (addRuns === 4 || addRuns === 6)) ? compExtra : totalExtra,
-    wicket: false,
-    dismissal: 'none',
-    timestamp: Date.now()
+  const titles = {
+    wide: 'Wide Ball (WD)',
+    noBall: 'No Ball (NB)',
+    bye: 'Bye Runs (BYE)',
+    legBye: 'Leg Bye Runs (LB)'
   };
 
-  inn.balls.push(ball);
-  triggerHaptic('normal');
+  const descriptions = {
+    wide: '1 penalty run + any completed bye runs. Ball is re-bowled.',
+    noBall: '1 penalty run + runs off bat or byes. Ball is re-bowled.',
+    bye: 'Legal delivery. Runs credited to team extras only.',
+    legBye: 'Legal delivery off batter body/pads. Team extras only.'
+  };
 
-  // Check strike rotation for byes/leg-byes/wides on odd additional runs
-  if (addRuns % 2 !== 0) {
-    const temp = inn.strikerId;
-    inn.strikerId = inn.nonStrikerId;
-    inn.nonStrikerId = temp;
+  const presets = (extraType === 'bye' || extraType === 'legBye')
+    ? [
+        { val: 1, label: '1', sub: 'Single' },
+        { val: 2, label: '2', sub: 'Two' },
+        { val: 3, label: '3', sub: 'Three' },
+        { val: 4, label: '4', sub: 'Boundary' },
+        { val: 5, label: '5', sub: 'Overthrow' }
+      ]
+    : [
+        { val: 0, label: '+0', sub: 'Standard' },
+        { val: 1, label: '+1', sub: 'Single' },
+        { val: 2, label: '+2', sub: 'Two' },
+        { val: 3, label: '+3', sub: 'Three' },
+        { val: 4, label: '+4', sub: 'Boundary' },
+        { val: 6, label: '+6', sub: 'Maximum' }
+      ];
+
+  if (extraType === 'bye' || extraType === 'legBye') {
+    selectedExtraAddRuns = 1;
   }
 
-  await saveActiveMatch();
-  renderLiveScorerView();
+  const basePenalty = (extraType === 'wide' || extraType === 'noBall') ? 1 : 0;
+
+  const html = `
+    <div>
+      <div class="extra-modal-banner">
+        <span>${descriptions[extraType]}</span>
+        <span class="extra-total-pill" id="extraTotalPreview">+${basePenalty + selectedExtraAddRuns} Run${(basePenalty + selectedExtraAddRuns) === 1 ? '' : 's'}</span>
+      </div>
+
+      ${extraType === 'noBall' ? `
+        <label style="font-size:11px; font-weight:800; color:var(--text-muted); text-transform:uppercase; display:block; margin-bottom:6px;">Additional Runs Credited To</label>
+        <div class="nb-source-toggle">
+          <button type="button" class="nb-source-btn active" id="nbSrcBat" onclick="setNbSource('bat')">🏏 Batter (Off the Bat)</button>
+          <button type="button" class="nb-source-btn" id="nbSrcBye" onclick="setNbSource('bye')">🏃 Byes / Leg-Byes</button>
+        </div>
+      ` : ''}
+
+      <label style="font-size:11px; font-weight:800; color:var(--text-muted); text-transform:uppercase; display:block; margin-bottom:8px;">
+        ${basePenalty ? 'Select Additional Runs Completed' : 'Select Runs Completed'}
+      </label>
+
+      <div class="run-chip-grid">
+        ${presets.map(p => `
+          <button type="button" class="run-chip-btn ${p.val === selectedExtraAddRuns ? 'active' : ''}" data-run="${p.val}" onclick="selectExtraRunChip(${p.val}, ${basePenalty})">
+            <strong>${p.label}</strong>
+            <span>${p.sub}</span>
+          </button>
+        `).join('')}
+      </div>
+
+      <div class="form-group">
+        <label>Or Custom Additional Runs</label>
+        <input type="number" id="customExtraRunInput" min="0" max="12" value="${selectedExtraAddRuns}" oninput="onCustomExtraInput(this.value, ${basePenalty})">
+      </div>
+    </div>
+  `;
+
+  openModal(titles[extraType], html, async () => {
+    const addRuns = Math.max(0, parseInt(selectedExtraAddRuns, 10) || 0);
+    const isWideOrNb = (extraType === 'wide' || extraType === 'noBall');
+    const compExtra = isWideOrNb ? 1 : 0;
+
+    let batRuns = 0;
+    let extraRuns = addRuns;
+    let extraTotal = compExtra + addRuns;
+
+    if (extraType === 'noBall' && selectedNbRunSource === 'bat' && addRuns > 0) {
+      batRuns = addRuns;
+      extraRuns = 0;
+      extraTotal = compExtra;
+    }
+
+    const ball = {
+      id: generateId(),
+      batterId: inn.strikerId,
+      nonStrikerId: inn.nonStrikerId,
+      bowlerId: inn.bowlerId,
+      batRuns,
+      extraType,
+      extraRuns,
+      extraTotal,
+      wicket: false,
+      dismissal: 'none',
+      timestamp: Date.now()
+    };
+
+    inn.balls.push(ball);
+    triggerHaptic(addRuns >= 4 ? 'boundary' : 'normal');
+
+    if (addRuns % 2 !== 0) {
+      const temp = inn.strikerId;
+      inn.strikerId = inn.nonStrikerId;
+      inn.nonStrikerId = temp;
+    }
+
+    await saveActiveMatch();
+    renderLiveScorerView();
+    return true;
+  });
+}
+
+function selectExtraRunChip(val, basePenalty) {
+  selectedExtraAddRuns = val;
+  document.querySelectorAll('.run-chip-btn').forEach(btn => {
+    btn.classList.toggle('active', Number(btn.dataset.run) === val);
+  });
+  const inp = document.getElementById('customExtraRunInput');
+  if (inp) inp.value = val;
+  const total = basePenalty + val;
+  const preview = document.getElementById('extraTotalPreview');
+  if (preview) preview.textContent = `+${total} Run${total === 1 ? '' : 's'}`;
+}
+
+function onCustomExtraInput(rawVal, basePenalty) {
+  const val = Math.max(0, parseInt(rawVal, 10) || 0);
+  selectedExtraAddRuns = val;
+  document.querySelectorAll('.run-chip-btn').forEach(btn => {
+    btn.classList.toggle('active', Number(btn.dataset.run) === val);
+  });
+  const total = basePenalty + val;
+  const preview = document.getElementById('extraTotalPreview');
+  if (preview) preview.textContent = `+${total} Run${total === 1 ? '' : 's'}`;
+}
+
+function setNbSource(src) {
+  selectedNbRunSource = src;
+  document.getElementById('nbSrcBat')?.classList.toggle('active', src === 'bat');
+  document.getElementById('nbSrcBye')?.classList.toggle('active', src === 'bye');
 }
 
 // 12 Wicket Dismissals Workflow
@@ -1858,28 +1993,58 @@ async function viewDetailedScorecard(matchId) {
 
   const teamAName = teams.find(t => t.id === m.a)?.name || 'Team A';
   const teamBName = teams.find(t => t.id === m.b)?.name || 'Team B';
+  const tossWinnerName = teams.find(t => t.id === m.tossWinner)?.name || '';
+  const tossSummary = tossWinnerName
+    ? `Toss: ${escapeHTML(tossWinnerName)} won the toss and elected to ${m.tossDecision === 'bowl' ? 'bowl' : 'bat'} first`
+    : '';
 
   const html = `
     <div style="font-size:13px;">
-      <div style="margin-bottom:12px; border-bottom:1px solid var(--border); padding-bottom:8px;">
-        <h3 style="font-size:16px;">${escapeHTML(m.title)}</h3>
-        <p class="muted">${escapeHTML(teamAName)} vs ${escapeHTML(teamBName)} · ${escapeHTML(m.venue || 'Venue')} · ${m.date}</p>
-        <p style="color:var(--primary); font-weight:800; margin-top:4px;">${escapeHTML(m.result || m.status)}</p>
+      <div style="margin-bottom:12px; border-bottom:1px solid var(--border); padding-bottom:10px;">
+        <h3 style="font-size:16px; margin-bottom:2px;">${escapeHTML(m.title)}</h3>
+        <p class="muted">${escapeHTML(teamAName)} vs ${escapeHTML(teamBName)} · ${escapeHTML(m.venue || 'Venue')} · ${escapeHTML(m.date || '')}</p>
+        ${tossSummary ? `<p class="muted" style="font-size:11px; margin-top:3px;">🪙 ${tossSummary}</p>` : ''}
+        <p style="color:var(--primary); font-weight:800; margin-top:5px;">${escapeHTML(m.result || m.status)}</p>
       </div>
 
       ${m.innings.map((inn, idx) => {
         const stats = CricketEngine.calculateInnings(inn, inn.squad, inn.bowlingSquad);
         const battingName = teams.find(t => t.id === inn.batting)?.name || `Innings ${idx + 1}`;
+        const runRate = stats.legalDeliveries > 0 ? (stats.totalRuns / (stats.legalDeliveries / 6)).toFixed(2) : '0.00';
+
+        // Separate batters who actually batted vs Did Not Bat (DNB)
+        const activeIds = new Set([inn.strikerId, inn.nonStrikerId]);
+        (inn.balls || []).forEach(b => {
+          if (b.batterId) activeIds.add(b.batterId);
+          if (b.nonStrikerId) activeIds.add(b.nonStrikerId);
+          if (b.wicketPlayerId) activeIds.add(b.wicketPlayerId);
+        });
+
+        const battedList = stats.batters.filter(b => b.balls > 0 || b.isOut || activeIds.has(b.id));
+        const dnbList = stats.batters.filter(b => !battedList.some(x => x.id === b.id));
+
+        const extrasParts = [];
+        if (stats.extras.wide) extrasParts.push(`wd ${stats.extras.wide}`);
+        if (stats.extras.noBall) extrasParts.push(`nb ${stats.extras.noBall}`);
+        if (stats.extras.bye) extrasParts.push(`b ${stats.extras.bye}`);
+        if (stats.extras.legBye) extrasParts.push(`lb ${stats.extras.legBye}`);
+        if (stats.extras.penalty) extrasParts.push(`pen ${stats.extras.penalty}`);
+        const extrasDetailStr = extrasParts.length ? `(${extrasParts.join(', ')})` : '(none)';
+
+        const fowStr = stats.fallOfWickets.length
+          ? stats.fallOfWickets.map(f => `${f.wicketNum}-${f.score} (${escapeHTML(f.playerName)}, ${f.overs} ov)`).join(', ')
+          : 'None';
+
         return `
-          <div style="margin-bottom:18px; background:var(--bg-surface-alt); padding:12px; border-radius:10px;">
+          <div style="margin-bottom:18px; background:var(--bg-surface-alt); padding:12px; border-radius:12px; border:1px solid var(--border);">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-              <strong>${escapeHTML(battingName)}</strong>
-              <span style="font-size:15px; font-weight:800; color:var(--primary);">${stats.totalRuns} / ${stats.wickets} (${stats.oversFormatted} ov)</span>
+              <strong style="font-size:14px;">${escapeHTML(battingName)}</strong>
+              <span style="font-size:15px; font-weight:900; color:var(--primary);">${stats.totalRuns}/${stats.wickets} <small style="font-weight:600; color:var(--text-muted);">(${stats.oversFormatted} ov)</small></span>
             </div>
 
             <!-- Batting Card -->
             <h4 style="font-size:11px; text-transform:uppercase; color:var(--text-muted); margin-bottom:4px;">Batting</h4>
-            <table class="crease-table" style="margin-bottom:12px;">
+            <table class="crease-table">
               <thead>
                 <tr>
                   <th>Batter</th>
@@ -1891,18 +2056,37 @@ async function viewDetailedScorecard(matchId) {
                 </tr>
               </thead>
               <tbody>
-                ${stats.batters.map(b => `
+                ${battedList.length ? battedList.map(b => `
                   <tr>
-                    <td>${escapeHTML(b.name)}<br><small class="muted">${formatDismissalText(b, playersMap, playersMap)}</small></td>
+                    <td>
+                      <strong>${escapeHTML(b.name)}</strong>${(!b.isOut && (b.id === inn.strikerId || b.id === inn.nonStrikerId)) ? '*' : ''}
+                      <br><small class="muted">${formatDismissalText(b, playersMap, playersMap)}</small>
+                    </td>
                     <td><strong>${b.runs}</strong></td>
                     <td>${b.balls}</td>
                     <td>${b.fours}</td>
                     <td>${b.sixes}</td>
                     <td>${b.strikeRate}</td>
                   </tr>
-                `).join('')}
+                `).join('') : '<tr><td colspan="6" class="muted" style="text-align:center;">No deliveries faced yet.</td></tr>'}
               </tbody>
             </table>
+
+            <!-- Extras & Total Strip -->
+            <div class="sc-summary-strip">
+              <span class="muted"><strong>Extras:</strong> ${stats.extras.total} ${extrasDetailStr}</span>
+              <span class="muted"><strong>Run Rate:</strong> ${runRate}</span>
+            </div>
+            <div class="sc-total-row">
+              <span>TOTAL</span>
+              <span>${stats.totalRuns}/${stats.wickets} (${stats.oversFormatted} Overs)</span>
+            </div>
+
+            <!-- Did Not Bat & Fall of Wickets -->
+            <div class="sc-meta-block">
+              ${dnbList.length ? `<div><strong>Did Not Bat:</strong> ${dnbList.map(p => escapeHTML(p.name)).join(', ')}</div>` : ''}
+              <div><strong>Fall of Wickets:</strong> ${fowStr}</div>
+            </div>
 
             <!-- Bowling Card -->
             <h4 style="font-size:11px; text-transform:uppercase; color:var(--text-muted); margin-bottom:4px;">Bowling</h4>
@@ -1911,18 +2095,24 @@ async function viewDetailedScorecard(matchId) {
                 <tr>
                   <th>Bowler</th>
                   <th>O</th>
+                  <th>M</th>
                   <th>R</th>
                   <th>W</th>
+                  <th>WD</th>
+                  <th>NB</th>
                   <th>ECON</th>
                 </tr>
               </thead>
               <tbody>
-                ${stats.bowlers.map(bo => `
+                ${stats.bowlers.filter(bo => bo.legalBalls > 0 || bo.wides > 0 || bo.noBalls > 0).map(bo => `
                   <tr>
-                    <td>${escapeHTML(bo.name)}</td>
+                    <td><strong>${escapeHTML(bo.name)}</strong></td>
                     <td>${bo.oversFormatted}</td>
+                    <td>${bo.maidens || 0}</td>
                     <td>${bo.runsConceded}</td>
                     <td><strong style="color:var(--danger);">${bo.wickets}</strong></td>
+                    <td>${bo.wides || 0}</td>
+                    <td>${bo.noBalls || 0}</td>
                     <td>${bo.economy}</td>
                   </tr>
                 `).join('')}
