@@ -2,7 +2,7 @@
 
 **Professional Offline-First Cricket Scoring & Scorecard Management PWA**
 
-## Updates in this release (v2.17 Pro Suite):
+## Updates in this release (v2.18 Pro Suite):
 - **Complete Cricket Dismissal & Delivery Edge Cases:**
   - Record **Completed Runs (`0`–`3`)**, **Delivery Type (`Legal`, `Wide +1`, `No-Ball +1`)**, and **Batters Crossed** directly inside the Wicket Modal.
   - **Retired Hurt Return:** Batters marked Retired Hurt can return to bat later in the innings.
@@ -23,6 +23,11 @@
 2. Commit and push:
    ```bash
    git add .
-   git commit -m "CricScorer v2.17 Pro Suite: full cricket edge cases, charts, MVP, ball log editor, and sharing"
+   git commit -m "CricScorer v2.18 Pro Suite: full cricket edge cases, charts, MVP, ball log editor, and sharing"
    git push origin main
    ```
+
+## Updates in v2.18 (Broadcast Stadium Layout):
+- **Broadcast Stadium Match Hero Card:** Dynamic SVG team shields, live pulsing status badge, 5-column telemetry grid (`CRR`, `RRR`, `Target`, `Runs Req.`, `Balls Rem.`), Powerplay/phase strip, and Chase Win Probability bar—retaining CricScorer's dark & light theme colors.
+- **Interactive Sub-Navigation Pill Tabs:** Switch seamlessly between **📡 Live**, **📋 Scorecard**, **🏏 Ball-by-Ball**, **🏆 Summary** (MVP + Manhattan & Worm charts), and **📊 Statistics**.
+- **Side-by-Side Crease & Telemetry Cards:** Compact dual Batting/Bowling tables, Partnership banner, itemized Extras card (`WD`, `NB`, `BYE`, `LB`, `PEN`), Recent Deliveries strip, and Match Info footer.

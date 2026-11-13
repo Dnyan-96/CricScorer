@@ -1451,6 +1451,185 @@ function generateMatchInsights(inn, stats, match) {
   return insights.slice(0, 3);
 }
 
+let currentScorerSubTab = 'live'; // 'live' | 'scorecard' | 'balls' | 'summary'
+
+function switchScorerSubTab(subTab) {
+  if (subTab === 'stats') {
+    navigate('statistics');
+    return;
+  }
+  currentScorerSubTab = subTab;
+  renderLiveScorerView();
+}
+
+function buildTeamShieldSVG(teamName, variant = 'a') {
+  const initial = (teamName || 'T').trim().charAt(0).toUpperCase();
+  const fillMain = variant === 'a' ? '#0288d1' : '#d32f2f';
+  const fillAccent = variant === 'a' ? '#29b6f6' : '#ff5252';
+  return `
+    <svg width="44" height="48" viewBox="0 0 44 48" style="display:block; filter:drop-shadow(0 2px 6px rgba(0,0,0,0.45));">
+      <path d="M22 2 L40 9 L40 23 C40 34 31 42 22 46 C13 42 4 34 4 23 L4 9 Z" fill="${fillMain}" stroke="#ffffff" stroke-width="2"/>
+      <path d="M22 5 L37 11 L37 23 C37 32 29.5 39 22 42.5 C14.5 39 7 32 7 23 L7 11 Z" fill="none" stroke="${fillAccent}" stroke-width="1.2"/>
+      <text x="22" y="29" text-anchor="middle" fill="#ffffff" font-size="18" font-weight="900" font-family="sans-serif">${escapeHTML(initial)}</text>
+    </svg>
+  `;
+}
+
+function buildInlineFullScorecardHTML(m, teams, playersMap) {
+  return m.innings.map((inn, idx) => {
+    const stats = CricketEngine.calculateInnings(inn, inn.squad, inn.bowlingSquad);
+    const battingName = teams.find(t => t.id === inn.batting)?.name || `Innings ${idx + 1}`;
+    const runRate = stats.legalDeliveries > 0 ? (stats.totalRuns / (stats.legalDeliveries / 6)).toFixed(2) : '0.00';
+
+    const activeIds = new Set([inn.strikerId, inn.nonStrikerId]);
+    (inn.balls || []).forEach(b => {
+      if (b.batterId) activeIds.add(b.batterId);
+      if (b.nonStrikerId) activeIds.add(b.nonStrikerId);
+      if (b.wicketPlayerId) activeIds.add(b.wicketPlayerId);
+    });
+
+    const battedList = stats.batters.filter(b => b.balls > 0 || b.isOut || activeIds.has(b.id));
+    const dnbList = stats.batters.filter(b => !battedList.some(x => x.id === b.id));
+
+    const extrasParts = [];
+    if (stats.extras.wide) extrasParts.push(`wd ${stats.extras.wide}`);
+    if (stats.extras.noBall) extrasParts.push(`nb ${stats.extras.noBall}`);
+    if (stats.extras.bye) extrasParts.push(`b ${stats.extras.bye}`);
+    if (stats.extras.legBye) extrasParts.push(`lb ${stats.extras.legBye}`);
+    if (stats.extras.penalty) extrasParts.push(`pen ${stats.extras.penalty}`);
+    const extrasDetailStr = extrasParts.length ? `(${extrasParts.join(', ')})` : '(none)';
+
+    const fowStr = stats.fallOfWickets.length
+      ? stats.fallOfWickets.map(f => `${f.wicketNum}-${f.score} (${escapeHTML(f.playerName)}, ${f.overs} ov)`).join(', ')
+      : 'None';
+
+    return `
+      <div class="card" style="padding:12px; margin-bottom:12px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <strong style="font-size:14px;">${escapeHTML(battingName)} ${inn.declared ? '<small class="muted">(dec)</small>' : ''}</strong>
+          <span style="font-size:15px; font-weight:900; color:var(--primary);">${stats.totalRuns}/${stats.wickets} <small style="font-weight:600; color:var(--text-muted);">(${stats.oversFormatted} ov)</small></span>
+        </div>
+
+        <table class="crease-table">
+          <thead>
+            <tr>
+              <th>Batter</th>
+              <th>R</th>
+              <th>B</th>
+              <th>4s</th>
+              <th>6s</th>
+              <th>SR</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${battedList.length ? battedList.map(b => `
+              <tr>
+                <td>
+                  <strong>${escapeHTML(b.name)}</strong>${(!b.isOut && (b.id === inn.strikerId || b.id === inn.nonStrikerId)) ? '*' : ''}
+                  <br><small class="muted">${formatDismissalText(b, playersMap, playersMap)}</small>
+                </td>
+                <td><strong>${b.runs}</strong></td>
+                <td>${b.balls}</td>
+                <td>${b.fours}</td>
+                <td>${b.sixes}</td>
+                <td>${b.strikeRate}</td>
+              </tr>
+            `).join('') : '<tr><td colspan="6" class="muted" style="text-align:center;">No deliveries faced yet.</td></tr>'}
+          </tbody>
+        </table>
+
+        <div class="sc-summary-strip">
+          <span class="muted"><strong>Extras:</strong> ${stats.extras.total} ${extrasDetailStr}</span>
+          <span class="muted"><strong>Run Rate:</strong> ${runRate}</span>
+        </div>
+        <div class="sc-total-row">
+          <span>TOTAL</span>
+          <span>${stats.totalRuns}/${stats.wickets} (${stats.oversFormatted} Overs)</span>
+        </div>
+
+        <div class="sc-meta-block">
+          ${dnbList.length ? `<div><strong>Did Not Bat:</strong> ${dnbList.map(p => escapeHTML(p.name)).join(', ')}</div>` : ''}
+          <div><strong>Fall of Wickets:</strong> ${fowStr}</div>
+        </div>
+
+        <table class="crease-table">
+          <thead>
+            <tr>
+              <th>Bowler</th>
+              <th>O</th>
+              <th>M</th>
+              <th>R</th>
+              <th>W</th>
+              <th>WD</th>
+              <th>NB</th>
+              <th>ECON</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${stats.bowlers.filter(bo => bo.legalBalls > 0 || bo.wides > 0 || bo.noBalls > 0).map(bo => `
+              <tr>
+                <td><strong>${escapeHTML(bo.name)}</strong></td>
+                <td>${bo.oversFormatted}</td>
+                <td>${bo.maidens || 0}</td>
+                <td>${bo.runsConceded}</td>
+                <td><strong style="color:var(--danger);">${bo.wickets}</strong></td>
+                <td>${bo.wides || 0}</td>
+                <td>${bo.noBalls || 0}</td>
+                <td>${bo.economy}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }).join('');
+}
+
+function buildInlineBallByBallHTML(inn, playersMap) {
+  const balls = inn.balls || [];
+  if (!balls.length) {
+    return '<div class="empty-state">No deliveries bowled yet in this innings.</div>';
+  }
+  let legalCounter = 0;
+  const rows = balls.map((b, idx) => {
+    const isWide = b.extraType === 'wide';
+    const isNoBall = b.extraType === 'noBall';
+    const isPenalty = b.extraType === 'penalty';
+    const isLegal = !isWide && !isNoBall && !isPenalty;
+    const ovLabel = `${Math.floor(legalCounter / 6)}.${(legalCounter % 6) + (isLegal ? 1 : 0)}`;
+    if (isLegal) legalCounter += 1;
+
+    const label = b.wicket
+      ? (b.dismissal === 'retiredHurt' ? 'Retired Hurt' : b.dismissal === 'retiredOut' ? 'Retired Out' : `WICKET (${b.dismissal})`)
+      : b.extraType
+        ? `${b.extraType.toUpperCase()} (+${b.extraRuns || 0})`
+        : `${b.batRuns} run${b.batRuns === 1 ? '' : 's'}`;
+
+    const badgeClass = b.wicket ? 'w' : b.batRuns === 4 ? 'b4' : b.batRuns === 6 ? 'b6' : '';
+    const btrName = playersMap[b.batterId] || 'Batter';
+    const blrName = playersMap[b.bowlerId] || 'Bowler';
+
+    return `
+      <div class="ball-log-row">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span class="muted" style="font-weight:800; min-width:30px;">${ovLabel}</span>
+          <span class="ball-log-badge ${badgeClass}">${b.wicket ? 'W' : b.extraType ? b.extraType.slice(0,2).toUpperCase() : b.batRuns}</span>
+          <div>
+            <strong>${escapeHTML(label)}</strong>
+            <div class="muted" style="font-size:11px;">${escapeHTML(blrName)} to ${escapeHTML(btrName)}</div>
+          </div>
+        </div>
+        <div style="display:flex; gap:4px;">
+          ${!b.wicket && !b.extraType ? `<button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="editBallRunsAt(${idx})">Edit</button>` : ''}
+          <button type="button" class="btn btn-outline" style="padding:4px 8px; font-size:11px; color:var(--danger);" onclick="deleteBallAt(${idx})">✕</button>
+        </div>
+      </div>
+    `;
+  }).reverse().join('');
+
+  return `<div class="card" style="padding:12px;">${rows}</div>`;
+}
+
 async function renderLiveScorerView() {
   const container = document.getElementById('liveScorerContainer');
   if (!activeMatch) {
@@ -1464,11 +1643,13 @@ async function renderLiveScorerView() {
   }
 
   const [teams, allPlayers] = await Promise.all([dbGetAll('teams'), dbGetAll('players')]);
+  const playersMap = {};
+  (allPlayers || []).forEach(p => { playersMap[p.id] = p.name; });
+
   const inn = activeMatch.innings[activeMatch.innings.length - 1];
   const battingTeamName = teams.find(t => t.id === inn.batting)?.name || 'Batting Team';
   const bowlingTeamName = teams.find(t => t.id === inn.bowling)?.name || 'Bowling Team';
 
-  // Compute live scorecard metrics
   const stats = CricketEngine.calculateInnings(inn, inn.squad, inn.bowlingSquad);
 
   const striker = inn.squad.find(p => p.id === inn.strikerId) || inn.squad[0];
@@ -1477,12 +1658,10 @@ async function renderLiveScorerView() {
 
   const strikerStats = stats.batters.find(b => b.id === striker?.id) || { runs: 0, balls: 0, fours: 0, sixes: 0, strikeRate: '0.0' };
   const nonStrikerStats = stats.batters.find(b => b.id === nonStriker?.id) || { runs: 0, balls: 0, fours: 0, sixes: 0, strikeRate: '0.0' };
-  const bowlerStats = stats.bowlers.find(b => b.id === bowler?.id) || { oversFormatted: '0.0', runsConceded: 0, wickets: 0, economy: '0.00' };
+  const bowlerStats = stats.bowlers.find(b => b.id === bowler?.id) || { oversFormatted: '0.0', maidens: 0, runsConceded: 0, wickets: 0, economy: '0.00' };
 
-  // Current over balls (last deliveries of current over)
   const recentBalls = inn.balls.slice(-8);
 
-  // Available batters & bowlers for dropdown selection (Alphabetical A-Z)
   const dismissedIds = new Set(stats.fallOfWickets.map(f => f.playerId || ''));
   const availableBatters = inn.squad.filter(p => !dismissedIds.has(p.id) || p.id === inn.strikerId || p.id === inn.nonStrikerId)
     .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
@@ -1490,21 +1669,35 @@ async function renderLiveScorerView() {
     .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
   const matchInsights = generateMatchInsights(inn, stats, activeMatch);
 
+  // Metrics for 5-column Broadcast Strip
+  const totalOvers = activeMatch.overs || 20;
+  const totalMaxBalls = totalOvers * 6;
+  const ballsRem = Math.max(0, totalMaxBalls - stats.legalDeliveries);
+  const crr = stats.legalDeliveries > 0 ? (stats.totalRuns / (stats.legalDeliveries / 6)).toFixed(2) : '0.00';
+  const runsReq = activeMatch.target ? Math.max(0, activeMatch.target - stats.totalRuns) : '--';
+  const rrr = (activeMatch.target && ballsRem > 0) ? (runsReq / (ballsRem / 6)).toFixed(2) : '--';
+
+  // Powerplay / Phase Indicator
+  const ppOvers = Math.max(1, Math.round(totalOvers * 0.3));
+  const currentOverFloat = stats.legalDeliveries / 6;
+  const phaseLabel = currentOverFloat < ppOvers
+    ? `🔥 <strong>Powerplay:</strong> 0.1 – ${ppOvers}.0 Overs`
+    : currentOverFloat >= (totalOvers * 0.75)
+      ? `⚡ <strong>Death Overs:</strong> Final Stretch`
+      : `🏏 <strong>Middle Overs:</strong> Building Momentum`;
+
+  // Win Probability Meter for 2nd Innings Chase
   let winProbHTML = '';
   if (activeMatch.target) {
-    const totalMaxBalls = (activeMatch.overs || 20) * 6;
-    const ballsLeft = Math.max(0, totalMaxBalls - stats.legalDeliveries);
-    const runsNeeded = Math.max(0, activeMatch.target - stats.totalRuns);
     const maxWkts = Math.max(1, (inn.squad?.length || 11) - 1);
     const wktsLeft = Math.max(0, maxWkts - stats.wickets);
-
     let batWinPct = 50;
-    if (runsNeeded <= 0) batWinPct = 100;
-    else if (ballsLeft === 0 || wktsLeft === 0) batWinPct = 0;
+    if (runsReq <= 0) batWinPct = 100;
+    else if (ballsRem === 0 || wktsLeft === 0) batWinPct = 0;
     else {
-      const rrr = runsNeeded / (ballsLeft / 6);
+      const rrrNum = runsReq / (ballsRem / 6);
       const wktFactor = (wktsLeft / maxWkts) * 35;
-      const rateFactor = Math.max(0, Math.min(65, (14 - rrr) * 5.5));
+      const rateFactor = Math.max(0, Math.min(65, (14 - rrrNum) * 5.5));
       batWinPct = Math.round(Math.max(4, Math.min(96, wktFactor + rateFactor)));
     }
     const bowlWinPct = 100 - batWinPct;
@@ -1523,198 +1716,285 @@ async function renderLiveScorerView() {
     `;
   }
 
+  // Bowler Quota Cap Check
   const capRule = document.getElementById('settingBowlerCap')?.value || 'oneFifth';
-  const matchOvers = activeMatch.overs || 20;
   let maxBowlerOvers = null;
-  if (capRule === 'oneFifth') maxBowlerOvers = Math.max(1, Math.ceil(matchOvers / 5));
-  else if (capRule === 'oneFourth') maxBowlerOvers = Math.max(1, Math.ceil(matchOvers / 4));
+  if (capRule === 'oneFifth') maxBowlerOvers = Math.max(1, Math.ceil(totalOvers / 5));
+  else if (capRule === 'oneFourth') maxBowlerOvers = Math.max(1, Math.ceil(totalOvers / 4));
   const bowlerOversBowled = (bowlerStats.legalBalls || 0) / 6;
   const isBowlerCapped = maxBowlerOvers !== null && bowler && bowlerOversBowled >= maxBowlerOvers;
 
+  // Partnership Info
   const pInfo = stats.partnership || { runs: 0, balls: 0, contrib: {} };
   const sPart = striker ? (pInfo.contrib[striker.id] || { runs: 0, balls: 0 }) : { runs: 0, balls: 0 };
   const nsPart = nonStriker ? (pInfo.contrib[nonStriker.id] || { runs: 0, balls: 0 }) : { runs: 0, balls: 0 };
 
-  container.innerHTML = `
-    <!-- Top Match Header -->
-    <div class="score-hero-box">
-      <div class="match-vs-header">${escapeHTML(battingTeamName)} vs ${escapeHTML(bowlingTeamName)} (${activeMatch.isSuperOver ? 'Super Over' : 'Inn ' + activeMatch.innings.length})</div>
-      <div class="live-digits-row">
-        <span class="live-score-big">${stats.totalRuns} / ${stats.wickets}</span>
-        <span class="live-overs-big">(${stats.oversFormatted} / ${activeMatch.overs} ov)</span>
-      </div>
-      <div class="live-rates-row">
-        <span>CRR: <strong>${stats.legalDeliveries > 0 ? (stats.totalRuns / (stats.legalDeliveries / 6)).toFixed(2) : '0.00'}</strong></span>
-        <span>Target: <strong>${activeMatch.target ? activeMatch.target : '--'}</strong></span>
-        <span>Extras: <strong>${stats.extras.total}</strong></span>
-      </div>
-      ${winProbHTML}
-    </div>
-
-    <!-- Live Match Insights -->
-    <div class="insights-box">
-      <div class="insights-header">
-        <span>🎙️ Live Match Pulse & Commentary</span>
-        <button type="button" class="insights-refresh-btn" onclick="cycleMatchCommentary()" title="Cycle Commentary Line">🎲 Next Line</button>
-      </div>
-      <div class="insights-list">
-        ${matchInsights.map(item => `
-          <div class="insight-item">
-            <span class="insight-icon">${item.icon}</span>
-            <span>${item.tag ? `<span class="insight-tag">${escapeHTML(item.tag)}</span>` : ''}${item.text}</span>
+  // Build Sub-Tab Content
+  let subTabContentHTML = '';
+  if (currentScorerSubTab === 'scorecard') {
+    subTabContentHTML = buildInlineFullScorecardHTML(activeMatch, teams, playersMap);
+  } else if (currentScorerSubTab === 'balls') {
+    subTabContentHTML = buildInlineBallByBallHTML(inn, playersMap);
+  } else if (currentScorerSubTab === 'summary') {
+    const mvp = calculateMatchMVP(activeMatch, playersMap);
+    const charts = buildMatchChartsSVG(activeMatch, teams);
+    subTabContentHTML = `
+      ${mvp ? `
+        <div class="mvp-banner">
+          <div>
+            <div class="mvp-title">🏆 ${activeMatch.status === 'Completed' ? 'Player of the Match' : 'Current MVP Leader'}</div>
+            <div class="mvp-player-name">${escapeHTML(mvp.name)} ${mvp.highlights.length ? `<small class="muted">(${mvp.highlights.join(', ')})</small>` : ''}</div>
           </div>
-        `).join('')}
+          <span class="mvp-pts-pill">${mvp.pts} pts</span>
+        </div>
+      ` : ''}
+      ${charts || '<div class="empty-state">Complete at least 1 over to generate Manhattan & Worm charts.</div>'}
+      <div style="margin-top:10px; text-align:right;">
+        <button type="button" class="btn btn-primary btn-block" onclick="shareMatchSummaryText('${activeMatch.id}')">📲 Share Match Summary</button>
       </div>
-    </div>
-
-    <!-- Crease & Bowler Dropdown Manager -->
-    <div class="card crease-manager-card">
-      <div class="eyebrow" style="margin-bottom:6px;">Manage Crease & Bowler on the fly</div>
-      <div class="crease-dropdown-row">
-        <div class="crease-selector-group">
-          <label>Striker (★)</label>
-          <select class="crease-select striker-select" onchange="changeStriker(this.value)">
-            ${!inn.strikerId ? '<option value="" selected disabled>Select Striker</option>' : ''}
-            ${availableBatters.map(p => `
-              <option value="${p.id}" ${p.id === inn.strikerId ? 'selected' : ''}>★ ${escapeHTML(p.name)}</option>
-            `).join('')}
-            <option value="__ADD_NEW__">＋ Type New Batter...</option>
-          </select>
+    `;
+  } else {
+    // Default 'live' scoring console
+    subTabContentHTML = `
+      <!-- Live Match Pulse & Commentary -->
+      <div class="insights-box">
+        <div class="insights-header">
+          <span>🎙️ Live Match Pulse & Commentary</span>
+          <button type="button" class="insights-refresh-btn" onclick="cycleMatchCommentary()" title="Cycle Commentary Line">🎲 Next Line</button>
         </div>
-
-        <div class="crease-selector-group">
-          <label>Non-Striker</label>
-          <select class="crease-select" onchange="changeNonStriker(this.value)">
-            ${!inn.nonStrikerId ? '<option value="" selected disabled>Select Non-Striker</option>' : ''}
-            ${availableBatters.map(p => `
-              <option value="${p.id}" ${p.id === inn.nonStrikerId ? 'selected' : ''}>${escapeHTML(p.name)}</option>
-            `).join('')}
-            <option value="__ADD_NEW__">＋ Type New Batter...</option>
-          </select>
-        </div>
-
-        <div class="crease-selector-group">
-          <label>Current Bowler</label>
-          <select class="crease-select bowler-select" onchange="changeBowler(this.value)">
-            ${!inn.bowlerId ? '<option value="" selected disabled>Select Bowler</option>' : ''}
-            ${sortedBowlers.map(b => `
-              <option value="${b.id}" ${b.id === inn.bowlerId ? 'selected' : ''}>⚡ ${escapeHTML(b.name)}</option>
-            `).join('')}
-            <option value="__ADD_NEW__">＋ Type New Bowler...</option>
-          </select>
+        <div class="insights-list">
+          ${matchInsights.map(item => `
+            <div class="insight-item">
+              <span class="insight-icon">${item.icon}</span>
+              <span>${item.tag ? `<span class="insight-tag">${escapeHTML(item.tag)}</span>` : ''}${item.text}</span>
+            </div>
+          `).join('')}
         </div>
       </div>
-    </div>
 
-    <!-- On-Crease Batters & Active Bowler Live Stats -->
-    <div class="card" style="padding:10px;">
-      <table class="crease-table">
-        <thead>
-          <tr>
-            <th>Batter</th>
-            <th>R</th>
-            <th>B</th>
-            <th>4s</th>
-            <th>6s</th>
-            <th>SR</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><span class="striker-indicator">★</span> <strong>${escapeHTML(striker?.name || 'Striker')}</strong></td>
-            <td><strong>${strikerStats.runs}</strong></td>
-            <td>${strikerStats.balls}</td>
-            <td>${strikerStats.fours}</td>
-            <td>${strikerStats.sixes}</td>
-            <td>${strikerStats.strikeRate}</td>
-          </tr>
-          <tr>
-            <td>&nbsp;&nbsp;${escapeHTML(nonStriker?.name || 'Non-Striker')}</td>
-            <td><strong>${nonStrikerStats.runs}</strong></td>
-            <td>${nonStrikerStats.balls}</td>
-            <td>${nonStrikerStats.fours}</td>
-            <td>${nonStrikerStats.sixes}</td>
-            <td>${nonStrikerStats.strikeRate}</td>
-          </tr>
-        </tbody>
-      </table>
+      <!-- Crease & Bowler Dropdown Manager -->
+      <div class="card crease-manager-card">
+        <div class="eyebrow" style="margin-bottom:6px;">Manage Crease & Bowler on the fly</div>
+        <div class="crease-dropdown-row">
+          <div class="crease-selector-group">
+            <label>Striker (★)</label>
+            <select class="crease-select striker-select" onchange="changeStriker(this.value)">
+              ${!inn.strikerId ? '<option value="" selected disabled>Select Striker</option>' : ''}
+              ${availableBatters.map(p => `
+                <option value="${p.id}" ${p.id === inn.strikerId ? 'selected' : ''}>★ ${escapeHTML(p.name)}</option>
+              `).join('')}
+              <option value="__ADD_NEW__">＋ Type New Batter...</option>
+            </select>
+          </div>
 
-      <table class="crease-table" style="margin-top:10px;">
-        <thead>
-          <tr>
-            <th>Bowler</th>
-            <th>O</th>
-            <th>R</th>
-            <th>W</th>
-            <th>ECON</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>
-              ⚡ <strong>${escapeHTML(bowler?.name || 'Bowler')}</strong>
-              ${isBowlerCapped ? `<br><span class="bowler-cap-warn">⚠️ Quota Reached (${maxBowlerOvers} ov max)</span>` : ''}
-            </td>
-            <td>${bowlerStats.oversFormatted}</td>
-            <td>${bowlerStats.runsConceded}</td>
-            <td><strong style="color:var(--danger);">${bowlerStats.wickets}</strong></td>
-            <td>${bowlerStats.economy}</td>
-          </tr>
-        </tbody>
-      </table>
+          <div class="crease-selector-group">
+            <label>Non-Striker</label>
+            <select class="crease-select" onchange="changeNonStriker(this.value)">
+              ${!inn.nonStrikerId ? '<option value="" selected disabled>Select Non-Striker</option>' : ''}
+              ${availableBatters.map(p => `
+                <option value="${p.id}" ${p.id === inn.nonStrikerId ? 'selected' : ''}>${escapeHTML(p.name)}</option>
+              `).join('')}
+              <option value="__ADD_NEW__">＋ Type New Batter...</option>
+            </select>
+          </div>
 
-      <div class="partnership-strip">
+          <div class="crease-selector-group">
+            <label>Current Bowler</label>
+            <select class="crease-select bowler-select" onchange="changeBowler(this.value)">
+              ${!inn.bowlerId ? '<option value="" selected disabled>Select Bowler</option>' : ''}
+              ${sortedBowlers.map(b => `
+                <option value="${b.id}" ${b.id === inn.bowlerId ? 'selected' : ''}>⚡ ${escapeHTML(b.name)}</option>
+              `).join('')}
+              <option value="__ADD_NEW__">＋ Type New Bowler...</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Side-by-Side Batting & Bowling Cards -->
+      <div class="crease-dual-grid">
+        <div class="mini-crease-card">
+          <table class="crease-table">
+            <thead>
+              <tr>
+                <th>🏏 Batting</th>
+                <th>R</th>
+                <th>B</th>
+                <th>4s</th>
+                <th>6s</th>
+                <th>SR</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="striker-indicator">▶</span> <strong>${escapeHTML(striker?.name || 'Striker')} *</strong></td>
+                <td><strong>${strikerStats.runs}</strong></td>
+                <td>${strikerStats.balls}</td>
+                <td>${strikerStats.fours}</td>
+                <td>${strikerStats.sixes}</td>
+                <td>${strikerStats.strikeRate}</td>
+              </tr>
+              <tr>
+                <td>&nbsp;&nbsp;${escapeHTML(nonStriker?.name || 'Non-Striker')}</td>
+                <td><strong>${nonStrikerStats.runs}</strong></td>
+                <td>${nonStrikerStats.balls}</td>
+                <td>${nonStrikerStats.fours}</td>
+                <td>${nonStrikerStats.sixes}</td>
+                <td>${nonStrikerStats.strikeRate}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="mini-crease-card">
+          <table class="crease-table">
+            <thead>
+              <tr>
+                <th>🔴 Bowling</th>
+                <th>O</th>
+                <th>M</th>
+                <th>R</th>
+                <th>W</th>
+                <th>Econ</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <strong>${escapeHTML(bowler?.name || 'Bowler')}</strong>
+                  ${isBowlerCapped ? `<br><span class="bowler-cap-warn">⚠️ Cap (${maxBowlerOvers} ov)</span>` : ''}
+                </td>
+                <td>${bowlerStats.oversFormatted}</td>
+                <td>${bowlerStats.maidens || 0}</td>
+                <td>${bowlerStats.runsConceded}</td>
+                <td><strong style="color:var(--danger);">${bowlerStats.wickets}</strong></td>
+                <td>${bowlerStats.economy}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Partnership Banner -->
+      <div class="partnership-banner-bar">
         <span>🤝 Partnership: <strong>${pInfo.runs} (${pInfo.balls})</strong></span>
         <span class="muted">${escapeHTML(striker?.name || 'Striker')}: ${sPart.runs}(${sPart.balls}) · ${escapeHTML(nonStriker?.name || 'Non-Striker')}: ${nsPart.runs}(${nsPart.balls})</span>
       </div>
-    </div>
 
-    <!-- Over Timeline Strip -->
-    <div class="card" style="padding:10px 14px;">
-      <div class="eyebrow" style="margin-bottom:4px;">Recent Deliveries</div>
-      <div class="timeline-strip">
-        ${recentBalls.length ? recentBalls.map(b => `
-          <div class="timeline-ball ${b.batRuns === 4 ? 'four' : b.batRuns === 6 ? 'six' : b.wicket ? 'wicket' : b.extraType ? 'extra' : ''}">
-            ${b.wicket ? 'W' : b.extraType ? b.extraType.slice(0,2).toUpperCase() : b.batRuns}
+      <!-- Scoring Touch Keypad -->
+      <div class="card scoring-keypad-panel" style="margin-top:0;">
+        <div class="keypad-grid-numbers">
+          <button class="key-touch" onclick="recordBallEvent(0)">0</button>
+          <button class="key-touch" onclick="recordBallEvent(1)">1</button>
+          <button class="key-touch" onclick="recordBallEvent(2)">2</button>
+          <button class="key-touch" onclick="recordBallEvent(3)">3</button>
+          <button class="key-touch four" onclick="recordBallEvent(4)">4</button>
+          <button class="key-touch" onclick="recordBallEvent(5)">5</button>
+          <button class="key-touch six" onclick="recordBallEvent(6)">6</button>
+        </div>
+
+        <div class="keypad-grid-extras">
+          <button class="key-touch extra-key" onclick="openExtraModal('wide')">WD</button>
+          <button class="key-touch extra-key" onclick="openExtraModal('noBall')">NB</button>
+          <button class="key-touch extra-key" onclick="openExtraModal('bye')">BYE</button>
+          <button class="key-touch extra-key" onclick="openExtraModal('legBye')">LB</button>
+          <button class="key-touch wicket" onclick="openWicketModal()">WICKET</button>
+        </div>
+
+        <div class="aux-controls-row">
+          <button class="btn btn-secondary" onclick="swapStrike()">⇄ Swap</button>
+          <button class="btn btn-secondary" onclick="openBowlerSelectModal()">⚡ Bowler</button>
+          <button class="btn btn-outline" onclick="openBallLogEditorModal()">📝 Edit Log</button>
+          <button class="btn btn-outline" onclick="undoLastDelivery()">↶ Undo</button>
+        </div>
+
+        <div class="aux-controls-row" style="margin-top:6px;">
+          <button class="btn btn-secondary" onclick="endInningsPrompt(false)">End Inn</button>
+          ${activeMatch.format === 'Test' ? `<button class="btn btn-secondary" onclick="endInningsPrompt(true)">Declare</button>` : ''}
+          <button class="btn btn-primary" onclick="finishMatchPrompt()">Finish Match</button>
+        </div>
+      </div>
+
+      <!-- Extras & Recent Deliveries Side-by-Side -->
+      <div class="extras-recent-grid">
+        <div class="card" style="padding:10px 12px; margin-bottom:0;">
+          <div class="eyebrow" style="margin-bottom:2px;">Extras (${stats.extras.total})</div>
+          <div class="extras-pill-row">
+            <div class="extra-stat-chip wd">WD<br>(${stats.extras.wide})</div>
+            <div class="extra-stat-chip nb">NB<br>(${stats.extras.noBall})</div>
+            <div class="extra-stat-chip bye">BYE<br>(${stats.extras.bye})</div>
+            <div class="extra-stat-chip">LB<br>(${stats.extras.legBye})</div>
+            <div class="extra-stat-chip">PEN<br>(${stats.extras.penalty})</div>
           </div>
-        `).join('') : '<span class="muted" style="font-size:12px;">Over in progress...</span>'}
+        </div>
+
+        <div class="card" style="padding:10px 12px; margin-bottom:0;">
+          <div class="eyebrow" style="margin-bottom:4px;">Recent Deliveries</div>
+          <div class="timeline-strip">
+            ${recentBalls.length ? recentBalls.map(b => `
+              <div class="timeline-ball ${b.batRuns === 4 ? 'four' : b.batRuns === 6 ? 'six' : b.wicket ? 'wicket' : b.extraType ? 'extra' : ''}">
+                ${b.wicket ? 'W' : b.extraType ? b.extraType.slice(0,2).toUpperCase() : b.batRuns}
+              </div>
+            `).join('') : '<span class="muted" style="font-size:12px;">Over in progress...</span>'}
+          </div>
+        </div>
       </div>
+
+      <!-- Match Info Footer Strip -->
+      <div class="match-info-footer-strip">
+        <span>🏆 <strong>Match Info:</strong> ${escapeHTML(activeMatch.format)} | Venue: ${escapeHTML(activeMatch.venue || 'Ground')}</span>
+        <span class="muted">📅 ${escapeHTML(activeMatch.date || 'Today')}</span>
+      </div>
+    `;
+  }
+
+  container.innerHTML = `
+    <!-- Broadcast Match Hero Card -->
+    <div class="broadcast-hero-card">
+      <div class="broadcast-top-bar">
+        <span class="broadcast-match-meta">${escapeHTML(activeMatch.format)} MATCH · ${activeMatch.isSuperOver ? 'SUPER OVER' : 'Innings ' + activeMatch.innings.length}</span>
+        <span class="live-pill-badge"><span class="live-pill-dot"></span> ${activeMatch.status.toUpperCase()}</span>
+      </div>
+
+      <div class="broadcast-crest-row">
+        <div class="team-crest-box">
+          ${buildTeamShieldSVG(battingTeamName, 'a')}
+          <span class="team-crest-name">${escapeHTML(battingTeamName)}</span>
+        </div>
+
+        <div class="broadcast-center-score">
+          <div class="broadcast-score-digits">${stats.totalRuns} / ${stats.wickets}</div>
+          <div class="broadcast-overs-sub">(${stats.oversFormatted} / ${totalOvers} ov)</div>
+        </div>
+
+        <div class="team-crest-box">
+          ${buildTeamShieldSVG(bowlingTeamName, 'b')}
+          <span class="team-crest-name">${escapeHTML(bowlingTeamName)}</span>
+        </div>
+      </div>
+
+      <div class="broadcast-metrics-grid">
+        <div class="b-metric-cell"><span>CRR</span><strong>${crr}</strong></div>
+        <div class="b-metric-cell"><span>RRR</span><strong>${rrr}</strong></div>
+        <div class="b-metric-cell"><span>Target</span><strong>${activeMatch.target || '--'}</strong></div>
+        <div class="b-metric-cell"><span>Runs Req.</span><strong>${runsReq}</strong></div>
+        <div class="b-metric-cell"><span>Balls Rem.</span><strong>${ballsRem}</strong></div>
+      </div>
+
+      <div class="powerplay-strip">${phaseLabel}</div>
+      ${winProbHTML}
     </div>
 
-    <!-- Scoring Touch Keypad -->
-    <div class="card scoring-keypad-panel">
-      <div class="keypad-grid-numbers">
-        <button class="key-touch" onclick="recordBallEvent(0)">0</button>
-        <button class="key-touch" onclick="recordBallEvent(1)">1</button>
-        <button class="key-touch" onclick="recordBallEvent(2)">2</button>
-        <button class="key-touch" onclick="recordBallEvent(3)">3</button>
-        <button class="key-touch four" onclick="recordBallEvent(4)">4</button>
-        <button class="key-touch" onclick="recordBallEvent(5)">5</button>
-        <button class="key-touch six" onclick="recordBallEvent(6)">6</button>
-      </div>
-
-      <div class="keypad-grid-extras">
-        <button class="key-touch extra-key" onclick="openExtraModal('wide')">WD</button>
-        <button class="key-touch extra-key" onclick="openExtraModal('noBall')">NB</button>
-        <button class="key-touch extra-key" onclick="openExtraModal('bye')">BYE</button>
-        <button class="key-touch extra-key" onclick="openExtraModal('legBye')">LB</button>
-        <button class="key-touch wicket" onclick="openWicketModal()">WICKET</button>
-      </div>
-
-      <div class="aux-controls-row">
-        <button class="btn btn-secondary" onclick="swapStrike()">⇄ Swap</button>
-        <button class="btn btn-secondary" onclick="openBowlerSelectModal()">⚡ Bowler</button>
-        <button class="btn btn-outline" onclick="openBallLogEditorModal()">📝 Edit Log</button>
-        <button class="btn btn-outline" onclick="undoLastDelivery()">↶ Undo</button>
-      </div>
-
-      <div class="aux-controls-row" style="margin-top:6px;">
-        <button class="btn btn-secondary" onclick="viewDetailedScorecard(activeMatch.id)">📋 Scorecard</button>
-        <button class="btn btn-secondary" onclick="endInningsPrompt(false)">End Inn</button>
-        ${activeMatch.format === 'Test' ? `<button class="btn btn-secondary" onclick="endInningsPrompt(true)">Declare</button>` : ''}
-        <button class="btn btn-primary" onclick="finishMatchPrompt()">Finish</button>
-      </div>
+    <!-- Sub-Navigation Pill Tabs -->
+    <div class="scorer-subtabs-row">
+      <button type="button" class="scorer-subtab-pill ${currentScorerSubTab === 'live' ? 'active' : ''}" onclick="switchScorerSubTab('live')">📡 Live</button>
+      <button type="button" class="scorer-subtab-pill ${currentScorerSubTab === 'scorecard' ? 'active' : ''}" onclick="switchScorerSubTab('scorecard')">📋 Scorecard</button>
+      <button type="button" class="scorer-subtab-pill ${currentScorerSubTab === 'balls' ? 'active' : ''}" onclick="switchScorerSubTab('balls')">🏏 Ball-by-Ball</button>
+      <button type="button" class="scorer-subtab-pill ${currentScorerSubTab === 'summary' ? 'active' : ''}" onclick="switchScorerSubTab('summary')">🏆 Summary</button>
+      <button type="button" class="scorer-subtab-pill" onclick="switchScorerSubTab('stats')">📊 Statistics</button>
     </div>
+
+    ${subTabContentHTML}
   `;
 }
 
