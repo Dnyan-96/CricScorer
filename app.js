@@ -1164,8 +1164,25 @@ async function changeBowler(newBowlerId) {
   renderLiveScorerView();
 }
 
+let commentarySeedOffset = 0;
+
+function cycleMatchCommentary() {
+  commentarySeedOffset += 1;
+  triggerHaptic('normal');
+  renderLiveScorerView();
+}
+
+function pickVariant(variants, seed) {
+  if (!variants || !variants.length) return '';
+  return variants[Math.abs(seed) % variants.length];
+}
+
 function generateMatchInsights(inn, stats, match) {
   const insights = [];
+  const balls = inn.balls || [];
+  const totalBallsCount = balls.length;
+  const seed = totalBallsCount + commentarySeedOffset;
+
   const legalBalls = stats.legalDeliveries;
   const overs = legalBalls / 6;
   const crr = overs > 0 ? (stats.totalRuns / overs) : 0;
@@ -1173,69 +1190,189 @@ function generateMatchInsights(inn, stats, match) {
   const totalMaxBalls = totalOvers * 6;
   const ballsRemaining = Math.max(0, totalMaxBalls - legalBalls);
 
-  // 1. Target Tracking (2nd Innings)
+  const striker = stats.batters.find(b => b.id === inn.strikerId);
+  const nonStriker = stats.batters.find(b => b.id === inn.nonStrikerId);
+  const bowler = stats.bowlers.find(b => b.id === inn.bowlerId);
+  const sName = striker ? escapeHTML(striker.name) : 'Striker';
+  const nsName = nonStriker ? escapeHTML(nonStriker.name) : 'Non-Striker';
+  const bName = bowler ? escapeHTML(bowler.name) : 'Bowler';
+
+  const lastBall = balls[balls.length - 1];
+
+  // A. Instant Last-Ball Reaction Commentary
+  if (lastBall) {
+    if (lastBall.wicket && lastBall.dismissal !== 'retiredHurt') {
+      const wicketLines = [
+        `TIMBER & HEARTBREAK! Walk back to the pavilion—<strong>${bName}</strong> & co. are celebrating like they just won the World Cup!`,
+        `GONE! Clean as a whistle! That dismissal just flipped the dressing room mood upside down.`,
+        `WICKET! New batter incoming—time to check if the bat has a middle or just edges today!`
+      ];
+      insights.push({ icon: '🚨', tag: 'Wicket', text: pickVariant(wicketLines, seed) });
+    } else if (lastBall.batRuns === 6) {
+      const sixLines = [
+        `MAXIMUM! <strong>${sName}</strong> just sent that ball into orbit—someone check Google Maps for where it landed!`,
+        `BOOM! Out of the ground! The bowler is suddenly rethinking their life choices.`,
+        `HUGE SIX! <strong>${sName}</strong> didn't just hit that—they gave it a boarding pass!`
+      ];
+      insights.push({ icon: '🚀', tag: 'Maximum', text: pickVariant(sixLines, seed) });
+    } else if (lastBall.batRuns === 4) {
+      const fourLines = [
+        `CRACKING FOUR! Pierced the gap like a laser—fielders could only admire the view.`,
+        `BOUNDARY! <strong>${sName}</strong> found the rope faster than Wi-Fi on full bars!`,
+        `FOUR RUNS! Pure timing from <strong>${sName}</strong>—that shot belongs in an art museum.`
+      ];
+      insights.push({ icon: '💥', tag: 'Boundary', text: pickVariant(fourLines, seed) });
+    } else if (lastBall.extraType === 'wide') {
+      const wideLines = [
+        `WIDE BALL! <strong>${bName}</strong> is bowling to the wide-angle lens today. Free runs on the house!`,
+        `WAYWARD! Even the wicket-keeper needed a taxi to reach that one. Extra delivery coming up!`
+      ];
+      insights.push({ icon: '🙆', tag: 'Extra', text: pickVariant(wideLines, seed) });
+    } else if (lastBall.extraType === 'noBall') {
+      const nbLines = [
+        `NO BALL! Overstepped the line—free gift for <strong>${sName}</strong> and an extra ball to survive!`,
+        `SIREN SOUNDS! <strong>${bName}</strong> crossed the line. Batters smiling from ear to ear!`
+      ];
+      insights.push({ icon: '📢', tag: 'No Ball', text: pickVariant(nbLines, seed) });
+    }
+  }
+
+  // B. 2nd Innings Chase / 1st Innings Projection & Match Pressure
   if (match.target) {
     const runsNeeded = Math.max(0, match.target - stats.totalRuns);
     if (runsNeeded <= 0) {
-      insights.push({ icon: '🏆', text: 'Target reached! Match victory.' });
+      insights.push({ icon: '🏆', tag: 'Victory', text: `GAME OVER! Target chased down in style! Break out the victory snacks!` });
     } else if (ballsRemaining === 0) {
-      insights.push({ icon: '⚠️', text: `Innings ended. Short by ${runsNeeded} runs.` });
+      insights.push({ icon: '🏁', tag: 'Finish', text: `Innings wrapped! Fell short by <strong>${runsNeeded} runs</strong>—what a battle!` });
     } else {
       const rrr = (runsNeeded / (ballsRemaining / 6)).toFixed(2);
-      insights.push({
-        icon: '🎯',
-        text: `Need <strong>${runsNeeded} runs</strong> from <strong>${ballsRemaining} balls</strong> (RRR: <strong>${rrr}</strong> vs CRR: <strong>${crr.toFixed(2)}</strong>)`
-      });
+      const rrrNum = parseFloat(rrr);
+      if (runsNeeded <= 12 && ballsRemaining <= 12) {
+        insights.push({
+          icon: '💓',
+          tag: 'Nail-Biter',
+          text: `HEART-STOPPER! Need <strong>${runsNeeded} runs</strong> off <strong>${ballsRemaining} balls</strong>—nail-biting stuff, nobody blink!`
+        });
+      } else if (rrrNum >= 12.0) {
+        insights.push({
+          icon: '🌋',
+          tag: 'High RRR',
+          text: `Need <strong>${runsNeeded} runs</strong> in <strong>${ballsRemaining} balls</strong> (RRR: <strong>${rrr}</strong>). Time for <strong>${sName}</strong> to switch to video-game mode!`
+        });
+      } else if (rrrNum <= 5.5) {
+        insights.push({
+          icon: '😎',
+          tag: 'Cruising',
+          text: `Smooth sailing! Only <strong>${runsNeeded} needed</strong> from <strong>${ballsRemaining} balls</strong> (RRR: <strong>${rrr}</strong> vs CRR: <strong>${crr.toFixed(2)}</strong>).`
+        });
+      } else {
+        insights.push({
+          icon: '🎯',
+          tag: 'Chase',
+          text: `Equation: <strong>${runsNeeded} runs</strong> off <strong>${ballsRemaining} balls</strong> (RRR: <strong>${rrr}</strong> vs CRR: <strong>${crr.toFixed(2)}</strong>). Properly balanced!`
+        });
+      }
     }
   } else if (overs >= 1) {
-    // 1st Innings Projected Total
     const projected = Math.round(crr * totalOvers);
+    const phaseNote = overs <= (totalOvers * 0.3)
+      ? 'Powerplay fireworks setting the tone!'
+      : overs >= (totalOvers * 0.75)
+        ? 'Death overs underway—every run is pure gold!'
+        : 'Middle-overs chess match in full swing.';
     insights.push({
       icon: '📊',
-      text: `Projected total at current ${crr.toFixed(2)} RPO: <strong>~${projected} runs</strong>`
+      tag: 'Forecast',
+      text: `At <strong>${crr.toFixed(2)} RPO</strong>, projecting <strong>~${projected} runs</strong>. ${phaseNote}`
     });
   }
 
-  // 2. Striker Momentum
-  const striker = stats.batters.find(b => b.id === inn.strikerId);
-  if (striker && striker.balls >= 6) {
+  // C. Batter Milestone & Form Watch
+  if (striker) {
     const sr = parseFloat(striker.strikeRate);
-    if (sr >= 160) {
-      insights.push({ icon: '🔥', text: `<strong>${escapeHTML(striker.name)}</strong> in attacking flow: ${striker.runs} off ${striker.balls} (SR: ${sr.toFixed(0)})` });
-    } else if (sr < 85 && striker.runs >= 10) {
-      insights.push({ icon: '⏳', text: `<strong>${escapeHTML(striker.name)}</strong> holding anchor: ${striker.runs} off ${striker.balls} balls` });
+    if (striker.runs >= 40 && striker.runs < 50) {
+      insights.push({
+        icon: '🌟',
+        tag: 'Milestone',
+        text: `<strong>${sName}</strong> is on <strong>${striker.runs}*</strong>—just <strong>${50 - striker.runs} away</strong> from a well-earned half-century! Raise that bat soon?`
+      });
+    } else if (striker.runs >= 90 && striker.runs < 100) {
+      insights.push({
+        icon: '💯',
+        tag: 'Nervous 90s',
+        text: `NERVOUS NINETIES! <strong>${sName}</strong> on <strong>${striker.runs}*</strong>—only <strong>${100 - striker.runs} runs</strong> from a legendary ton!`
+      });
+    } else if (striker.balls >= 6 && sr >= 175) {
+      insights.push({
+        icon: '🔥',
+        tag: 'On Fire',
+        text: `<strong>${sName}</strong> is seeing it like a beach ball! <strong>${striker.runs} (${striker.balls})</strong> at a blistering <strong>${sr.toFixed(0)} SR</strong>!`
+      });
+    } else if (striker.balls >= 8 && striker.runs === 0) {
+      insights.push({
+        icon: '🐢',
+        tag: 'Test Mode',
+        text: `<strong>${sName}</strong> has played <strong>${striker.balls} dot balls</strong> for 0—someone tell them this isn't a 5-day Test match!`
+      });
     }
   }
 
-  // 3. Bowler Spell Analysis
-  const bowler = stats.bowlers.find(b => b.id === inn.bowlerId);
-  if (bowler && bowler.legalBalls >= 6) {
+  // D. Bowler & Pressure / Hat-Trick / Collapse Watch
+  const lastTwo = balls.slice(-2);
+  if (lastTwo.length === 2 && lastTwo.every(b => b.wicket && b.dismissal !== 'retiredHurt')) {
+    insights.push({
+      icon: '🎩',
+      tag: 'Hat-Trick Alert',
+      text: `HAT-TRICK BALL INCOMING! Two wickets in two balls—fielders crowding around the bat like bees!`
+    });
+  } else if (bowler && bowler.legalBalls >= 6) {
     const econ = parseFloat(bowler.economy);
-    if (econ <= 6.0) {
-      insights.push({ icon: '⚡', text: `<strong>${escapeHTML(bowler.name)}</strong> bowling tight spell (${econ.toFixed(2)} Econ, ${bowler.wickets} wkts)` });
-    } else if (econ >= 11.5) {
-      insights.push({ icon: '📈', text: `<strong>${escapeHTML(bowler.name)}</strong> conceding ${econ.toFixed(2)} RPO - consider bowling rotation` });
+    if (econ <= 5.0) {
+      insights.push({
+        icon: '🧊',
+        tag: 'Ice Cold',
+        text: `<strong>${bName}</strong> has locked down the scoring! Giving away just <strong>${econ.toFixed(2)} RPO</strong> (${bowler.wickets} wkts).`
+      });
+    } else if (econ >= 12.5) {
+      insights.push({
+        icon: '🌶️',
+        tag: 'Expensive',
+        text: `<strong>${bName}</strong> is leaking <strong>${econ.toFixed(2)} RPO</strong>—captain might need a backup plan soon!`
+      });
     }
   }
 
-  // 4. Dot-ball Pressure
-  const recent6 = inn.balls.slice(-6);
+  // E. Recent Over Momentum (Dots vs Boundaries)
+  const recent6 = balls.slice(-6);
   if (recent6.length >= 6) {
     const dotsInLast6 = recent6.filter(b => b.batRuns === 0 && !b.extraType && !b.wicket).length;
-    if (dotsInLast6 >= 4) {
-      insights.push({ icon: '🧱', text: `Bowling pressure mounting: <strong>${dotsInLast6} dots</strong> in last 6 deliveries` });
-    }
     const boundariesInLast6 = recent6.filter(b => b.batRuns === 4 || b.batRuns === 6).length;
-    if (boundariesInLast6 >= 3) {
-      insights.push({ icon: '💥', text: `Boundary surge: <strong>${boundariesInLast6} boundaries</strong> in last over` });
+    if (dotsInLast6 >= 5) {
+      insights.push({
+        icon: '🧱',
+        tag: 'Dot Jail',
+        text: `<strong>${dotsInLast6} dot balls</strong> in the last 6 deliveries! Pressure cooker is whistling loud!`
+      });
+    } else if (boundariesInLast6 >= 3) {
+      insights.push({
+        icon: '⚡',
+        tag: 'Carnage',
+        text: `<strong>${boundariesInLast6} boundaries</strong> in the last 6 balls! The scoreboard operator needs an ice pack!`
+      });
     }
   }
 
+  // F. Opening / Fallback Cheerful Tips
   if (!insights.length) {
-    insights.push({ icon: '🏏', text: 'Innings in progress. Use the dropdowns above to switch striker, non-striker, or bowler at any point.' });
+    const openerLines = [
+      `Fresh pitch, shiny ball, zero excuses! Let's get the scoreboard ticking for <strong>${sName}</strong> & <strong>${nsName}</strong>!`,
+      `Fielders are warmed up, <strong>${bName}</strong> has the ball—first boundary wins bragging rights!`,
+      `Match on! Tap the run buttons below and let the live commentary roll!`
+    ];
+    insights.push({ icon: '🏏', tag: 'Kickoff', text: pickVariant(openerLines, seed) });
   }
 
-  return insights;
+  return insights.slice(0, 3);
 }
 
 async function renderLiveScorerView() {
@@ -1295,13 +1432,14 @@ async function renderLiveScorerView() {
     <!-- Live Match Insights -->
     <div class="insights-box">
       <div class="insights-header">
-        <span>⚡ Live Match Insights</span>
+        <span>🎙️ Live Match Pulse & Commentary</span>
+        <button type="button" class="insights-refresh-btn" onclick="cycleMatchCommentary()" title="Cycle Commentary Line">🎲 Next Line</button>
       </div>
       <div class="insights-list">
         ${matchInsights.map(item => `
           <div class="insight-item">
             <span class="insight-icon">${item.icon}</span>
-            <span>${item.text}</span>
+            <span>${item.tag ? `<span class="insight-tag">${escapeHTML(item.tag)}</span>` : ''}${item.text}</span>
           </div>
         `).join('')}
       </div>

@@ -1752,3 +1752,36 @@ body[data-theme="light"] .player-select-tile.selected-b {
 .sc-meta-block strong {
   color: var(--text-main);
 }
+
+
+/* Interactive Commentary / Live Match Insights Refresh */
+.insights-refresh-btn {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--primary);
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3px 9px;
+  border-radius: 14px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+.insights-refresh-btn:active {
+  transform: scale(0.95);
+  background: var(--primary-glow);
+}
+.insight-tag {
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--primary);
+  margin-right: 4px;
+  letter-spacing: 0.4px;
+}
