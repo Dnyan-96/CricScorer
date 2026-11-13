@@ -35,67 +35,108 @@
   <main id="mainApp">
     <!-- VIEW 1: MODERN HOME DASHBOARD -->
     <section id="dashboard" class="page active">
-      <!-- Dynamic Hero: Prominent Live Match Card or Matchday Launcher -->
+      <!-- Stadium Welcome Banner -->
+      <div class="home-welcome-banner">
+        <div class="home-welcome-copy">
+          <h1>Welcome back!</h1>
+          <p>Your matches, teams and player performances</p>
+        </div>
+        <svg class="home-welcome-art" viewBox="0 0 180 90" aria-hidden="true">
+          <defs>
+            <linearGradient id="stadiumGlow" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="rgba(0,230,118,0)" />
+              <stop offset="50%" stop-color="rgba(0,230,118,0.22)" />
+              <stop offset="100%" stop-color="rgba(0,230,118,0.08)" />
+            </linearGradient>
+          </defs>
+          <rect x="0" y="0" width="180" height="90" fill="url(#stadiumGlow)" />
+          <!-- Floodlight Towers -->
+          <g fill="rgba(255,255,255,0.22)">
+            <rect x="148" y="18" width="22" height="12" rx="2" />
+            <line x1="159" y1="30" x2="159" y2="75" stroke="rgba(255,255,255,0.18)" stroke-width="2" />
+            <circle cx="152" cy="22" r="1.5" fill="#ffffff" />
+            <circle cx="159" cy="22" r="1.5" fill="#ffffff" />
+            <circle cx="166" cy="22" r="1.5" fill="#ffffff" />
+            <circle cx="152" cy="26" r="1.5" fill="#ffffff" />
+            <circle cx="159" cy="26" r="1.5" fill="#ffffff" />
+            <circle cx="166" cy="26" r="1.5" fill="#ffffff" />
+          </g>
+          <!-- Batter Silhouette -->
+          <g fill="rgba(3, 20, 10, 0.65)">
+            <circle cx="115" cy="30" r="8" />
+            <path d="M104 42 C108 38, 122 38, 125 44 L130 66 L124 88 L116 88 L114 66 L108 88 L100 88 L105 64 Z" />
+            <rect x="86" y="14" width="6" height="32" rx="2" transform="rotate(-32 86 14)" />
+          </g>
+        </svg>
+      </div>
+
+      <!-- Dynamic Hero: Live Match In Progress Card or Matchday Launcher -->
       <div id="dashHeroContainer">
         <!-- Rendered dynamically by app.js -->
       </div>
 
-      <!-- Quick Action Grid (Clean, Touch-Friendly 3-Tile Row) -->
-      <div class="dash-quick-grid">
-        <button class="dash-quick-tile primary-tile" onclick="navigate('create-match')">
-          <span class="dash-tile-icon">🏏</span>
-          <span class="dash-tile-title">Start Match</span>
-          <span class="dash-tile-sub">New fixture</span>
+      <!-- 4-Tile Quick Action Grid -->
+      <div class="home-quick-grid-4">
+        <button class="home-quick-card primary-action" onclick="navigate('create-match')">
+          <span class="hq-icon">🏏</span>
+          <span class="hq-title">Start Match</span>
+          <span class="hq-sub">New Fixture</span>
         </button>
-        <button class="dash-quick-tile" onclick="openPlayerModal()">
-          <span class="dash-tile-icon">👤</span>
-          <span class="dash-tile-title">Add Player</span>
-          <span class="dash-tile-sub">Squad pool</span>
+        <button class="home-quick-card" onclick="openPlayerModal()">
+          <span class="hq-icon">👤</span>
+          <span class="hq-title">Add Player</span>
+          <span class="hq-sub">Squad pool</span>
         </button>
-        <button class="dash-quick-tile" onclick="openTeamModal()">
-          <span class="dash-tile-icon">🛡️</span>
-          <span class="dash-tile-title">Add Team</span>
-          <span class="dash-tile-sub">Roster</span>
+        <button class="home-quick-card" onclick="openTeamModal()">
+          <span class="hq-icon">🛡️</span>
+          <span class="hq-title">Add Team</span>
+          <span class="hq-sub">Roster</span>
+        </button>
+        <button class="home-quick-card" onclick="navigate('history')">
+          <span class="hq-icon">🕒</span>
+          <span class="hq-title">Match History</span>
+          <span class="hq-sub">View past matches</span>
         </button>
       </div>
 
-      <!-- Compact Overview Metrics Strip -->
-      <div class="dash-metrics-bar">
-        <div class="metric-pill">
+      <!-- 4-Column Summary Metrics Card -->
+      <div class="home-metrics-card">
+        <div class="hm-cell">
+          <span class="hm-icon">🏆</span>
           <strong id="statTotalMatches">0</strong>
           <span>Total Matches</span>
         </div>
-        <div class="metric-pill">
+        <div class="hm-cell">
+          <span class="hm-icon">🛡️</span>
           <strong id="statTotalTeams">0</strong>
           <span>Teams</span>
         </div>
-        <div class="metric-pill">
+        <div class="hm-cell">
+          <span class="hm-icon">👥</span>
           <strong id="statTotalPlayers">0</strong>
           <span>Players</span>
+        </div>
+        <div class="hm-cell">
+          <span class="hm-icon">✅</span>
+          <strong id="statCompletedMatches">0</strong>
+          <span>Completed</span>
         </div>
       </div>
 
       <!-- Recent Matches Section -->
       <div class="section-title-row">
-        <h2>Recent Matches</h2>
+        <h2>🗓️ Recent Matches</h2>
         <button class="link-btn" onclick="navigate('history')">View all →</button>
       </div>
       <div id="dashboardMatchesList" class="stack-list empty-state">No match records found.</div>
 
-      <!-- Leaderboard Spotlight (Top Batters & Bowlers) -->
-      <div class="section-title-row" style="margin-top:20px;">
-        <h2>Top Performers</h2>
-        <button class="link-btn" onclick="navigate('statistics')">Full stats →</button>
+      <!-- Top Performers Spotlight -->
+      <div class="section-title-row" style="margin-top:18px;">
+        <h2>⭐ Top Performers</h2>
+        <button class="link-btn" onclick="navigate('statistics')">View Stats →</button>
       </div>
-      <div class="two-col-grid" id="dashboardTopPerformers">
-        <div class="card mini-card">
-          <div class="mini-card-header">🏏 Top Run Scorers</div>
-          <div id="dashTopBatters" class="mini-list"><span class="muted">No batting data yet.</span></div>
-        </div>
-        <div class="card mini-card">
-          <div class="mini-card-header">⚡ Top Wicket Takers</div>
-          <div id="dashTopBowlers" class="mini-list"><span class="muted">No bowling data yet.</span></div>
-        </div>
+      <div id="dashboardTopPerformersStrip" class="home-performers-strip">
+        <span class="muted" style="font-size:12px;">No player records yet.</span>
       </div>
     </section>
 
