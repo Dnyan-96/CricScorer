@@ -1785,3 +1785,182 @@ body[data-theme="light"] .player-select-tile.selected-b {
   margin-right: 4px;
   letter-spacing: 0.4px;
 }
+
+
+/* ==========================================
+   V2.16 PRO SUITE: PARTNERSHIP, CHARTS, BALL LOG, MVP & WIN PROBABILITY
+   ========================================== */
+
+.stats-filter-grid {
+  grid-template-columns: repeat(2, 1fr) !important;
+}
+@media (max-width: 600px) {
+  .stats-filter-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+.partnership-strip {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 10px;
+  margin-top: 8px;
+  font-size: 11.5px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.partnership-strip strong {
+  color: var(--primary);
+}
+
+.bowler-cap-warn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--warning-bg);
+  color: var(--warning);
+  border: 1px solid var(--warning);
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 6px;
+  margin-top: 4px;
+}
+
+.win-prob-card {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.win-prob-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+.win-prob-track {
+  width: 100%;
+  height: 7px;
+  background: var(--bg-surface-alt);
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  border: 1px solid var(--border);
+}
+.win-prob-fill-bat {
+  height: 100%;
+  background: var(--primary);
+  transition: width 0.35s ease;
+}
+.win-prob-fill-bowl {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.35s ease;
+}
+
+.mvp-banner {
+  background: linear-gradient(135deg, rgba(0, 230, 118, 0.14), rgba(217, 243, 106, 0.12));
+  border: 1px solid var(--primary);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.mvp-title {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--primary);
+}
+.mvp-player-name {
+  font-size: 15px;
+  font-weight: 900;
+  color: var(--text-main);
+}
+.mvp-pts-pill {
+  background: var(--primary);
+  color: #03140a;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 4px 10px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+.chart-box {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  margin-top: 10px;
+}
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.chart-legend {
+  display: flex;
+  gap: 10px;
+  font-size: 10px;
+  text-transform: none;
+}
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 4px;
+}
+
+.ball-log-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  gap: 8px;
+}
+.ball-log-badge {
+  min-width: 30px;
+  height: 28px;
+  border-radius: 6px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 11px;
+}
+.ball-log-badge.w {
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger);
+}
+.ball-log-badge.b4 {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+.ball-log-badge.b6 {
+  color: var(--accent);
+  border-color: var(--accent);
+}

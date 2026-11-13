@@ -119,9 +119,14 @@
       <div class="card form-card">
         <form id="createMatchForm" onsubmit="handleCreateMatchSubmit(event)">
           <div class="field-grid">
-            <div class="form-group col-full">
-              <label>Match Title</label>
+            <div class="form-group">
+              <label>Match Title *</label>
               <input type="text" id="cmTitle" required placeholder="e.g. League Semi-Final / Weekend T20">
+            </div>
+
+            <div class="form-group">
+              <label>Tournament / Series <small class="muted">(Optional)</small></label>
+              <input type="text" id="cmSeries" placeholder="e.g. Sunday Box League">
             </div>
 
             <!-- Fixture Mode Selector (Standard Squad vs Quick Match) -->
@@ -315,6 +320,10 @@
 
       <div class="card" style="margin-bottom:15px;">
         <div class="filter-bar stats-filter-grid" style="margin:0;">
+          <select id="statsSeriesFilter" onchange="onStatsFilterChange('series')">
+            <option value="">All Tournaments / Series</option>
+          </select>
+
           <select id="statsFormatFilter" onchange="onStatsFilterChange('format')">
             <option value="">All Formats</option>
             <option value="T20">T20</option>
