@@ -2628,8 +2628,7 @@ async function shareMatchSummaryText(matchId) {
     lines.push(`🏆 Player of the Match: *${mvp.name}* (${mvp.highlights.join(', ')})`);
   }
 
-  const shareText = lines.join('
-').trim();
+  const shareText = lines.join('\n').trim();
 
   if (navigator.share) {
     try {
@@ -3397,14 +3396,7 @@ async function confirmWipeAllData() {
   }
 }
 
-async function inspectStorageQuota() {
-  if (navigator.storage && navigator.storage.estimate) {
-    const est = await navigator.storage.estimate();
-    const usedMB = (est.usage / (1024 * 1024)).toFixed(2);
-    const quotaMB = (est.quota / (1024 * 1024)).toFixed(0);
-    document.getElementById('storageQuotaLabel').textContent = `Using ${usedMB} MB of ~${quotaMB} MB quota available.`;
-  }
-}
+
 
 function triggerDownload(content, filename, mimeType) {
   const blob = new Blob([content], { type: mimeType });

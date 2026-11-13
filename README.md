@@ -2,7 +2,7 @@
 
 **Professional Offline-First Cricket Scoring & Scorecard Management PWA**
 
-## Updates in this release (v2.16 Pro Suite):
+## Updates in this release (v2.17 Pro Suite):
 - **Complete Cricket Dismissal & Delivery Edge Cases:**
   - Record **Completed Runs (`0`–`3`)**, **Delivery Type (`Legal`, `Wide +1`, `No-Ball +1`)**, and **Batters Crossed** directly inside the Wicket Modal.
   - **Retired Hurt Return:** Batters marked Retired Hurt can return to bat later in the innings.
@@ -23,6 +23,6 @@
 2. Commit and push:
    ```bash
    git add .
-   git commit -m "CricScorer v2.16 Pro Suite: full cricket edge cases, charts, MVP, ball log editor, and sharing"
+   git commit -m "CricScorer v2.17 Pro Suite: full cricket edge cases, charts, MVP, ball log editor, and sharing"
    git push origin main
    ```
