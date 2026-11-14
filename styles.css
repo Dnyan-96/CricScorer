@@ -2370,3 +2370,185 @@ body[data-theme="light"] .hlh-metrics-strip {
 .scorer-phase-strip strong {
   color: var(--warning);
 }
+
+
+/* ==========================================
+   V2.21 OPENING SPLASH ANIMATION & BRAND LOGO HEADER CARD
+   ========================================== */
+
+.splash-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: radial-gradient(circle at 50% 45%, #111922 0%, #090d12 75%, #05080b 100%);
+  border: 2px solid #0e6f3d;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 48px 24px 44px;
+  transition: opacity 0.45s ease, visibility 0.45s ease, transform 0.45s ease;
+}
+
+.splash-overlay.splash-hidden {
+  opacity: 0;
+  visibility: hidden;
+  transform: scale(1.03);
+  pointer-events: none;
+}
+
+.splash-emblem-stage {
+  margin: auto;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 150px;
+  height: 150px;
+}
+
+.splash-glow-ring {
+  position: absolute;
+  inset: 8px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(0, 200, 83, 0.24) 0%, rgba(0, 200, 83, 0) 70%);
+  animation: splashPulseGlow 1.6s ease-out forwards;
+}
+
+.splash-logo-wrap {
+  width: 112px;
+  height: 112px;
+  animation: splashBallDeliver 0.85s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.splash-logo-wrap .cs-emblem-svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 8px 22px rgba(0, 200, 83, 0.35));
+}
+
+.splash-brand-footer {
+  text-align: center;
+  animation: splashWordmarkRise 0.7s ease-out 0.25s both;
+}
+
+.splash-wordmark {
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: -0.4px;
+  color: #ffffff;
+}
+
+.splash-wordmark span {
+  color: #00e676;
+}
+
+.splash-sub {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.4px;
+  color: #8fa399;
+  margin-top: 4px;
+}
+
+@keyframes splashBallDeliver {
+  0% {
+    opacity: 0;
+    transform: translate(-34px, 34px) scale(0.55) rotate(-25deg);
+  }
+  70% {
+    opacity: 1;
+    transform: translate(3px, -3px) scale(1.05) rotate(3deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1) rotate(0deg);
+  }
+}
+
+@keyframes splashPulseGlow {
+  0% { transform: scale(0.6); opacity: 0; }
+  60% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.85; }
+}
+
+@keyframes splashWordmarkRise {
+  0% { opacity: 0; transform: translateY(14px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* Top Nav Brand Logo Badge */
+.brand-logo-badge {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #0b1017;
+  border: 1.5px solid #00c853;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 200, 83, 0.22);
+}
+
+.brand-logo-badge .cs-emblem-svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* Branded Home Logo Header Card */
+.home-logo-header-card {
+  border: 1.5px solid #0e6f3d;
+  background: linear-gradient(135deg, #0b1318 0%, var(--bg-surface) 55%, var(--bg-surface-alt) 100%);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+
+body[data-theme="light"] .home-logo-header-card {
+  background: linear-gradient(135deg, var(--bg-surface) 0%, var(--bg-surface-alt) 100%);
+  border-color: var(--primary);
+}
+
+.home-header-brand-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: relative;
+  z-index: 2;
+  max-width: 78%;
+}
+
+.home-header-emblem {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: #0b1017;
+  border: 1.5px solid #00c853;
+  padding: 5px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(0, 200, 83, 0.28);
+}
+
+.home-header-emblem .cs-emblem-svg {
+  width: 100%;
+  height: 100%;
+}
+
+.home-header-eyebrow {
+  font-size: 9.5px;
+  font-weight: 900;
+  letter-spacing: 1.1px;
+  color: #00e676;
+  margin-bottom: 2px;
+}
+
+body[data-theme="light"] .home-header-eyebrow {
+  color: var(--primary);
+}
+
+.home-logo-header-card .home-welcome-copy {
+  max-width: 100%;
+}

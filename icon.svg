@@ -1,26 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <defs>
-    <radialGradient id="bgG" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#0e3424"/>
-      <stop offset="100%" stop-color="#05120c"/>
-    </radialGradient>
-    <linearGradient id="ballG" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#00e676"/>
-      <stop offset="100%" stop-color="#00897b"/>
-    </linearGradient>
-  </defs>
-  <!-- Background Badge -->
-  <rect width="512" height="512" rx="128" fill="url(#bgG)"/>
-  
-  <!-- Subtle Stadium Outer Ring -->
-  <circle cx="256" cy="256" r="190" fill="none" stroke="#00e676" stroke-width="3" opacity="0.15"/>
-  <circle cx="256" cy="256" r="160" fill="none" stroke="#00e676" stroke-width="2" opacity="0.25"/>
-
-  <!-- Cricket Ball Core -->
-  <circle cx="256" cy="256" r="130" fill="url(#ballG)"/>
-
-  <!-- Clean Seam & Stitching -->
-  <path d="M164 164 C 220 220, 292 292, 348 348" stroke="#ffffff" stroke-width="12" stroke-linecap="round" fill="none"/>
-  <path d="M152 176 C 210 234, 280 304, 338 362" stroke="#ffffff" stroke-width="4" stroke-dasharray="8 8" fill="none" opacity="0.9"/>
-  <path d="M176 152 C 234 210, 304 280, 362 338" stroke="#ffffff" stroke-width="4" stroke-dasharray="8 8" fill="none" opacity="0.9"/>
+  <rect width="512" height="512" rx="112" fill="#0b1017"/>
+  <rect x="12" y="12" width="488" height="488" rx="102" fill="none" stroke="#0e6f3d" stroke-width="10"/>
+  <!-- Bold Emerald 'C' Ring -->
+  <path d="M 366 150 A 152 152 0 1 0 366 362 L 306 310 A 76 76 0 1 1 306 202 Z" fill="#00c853"/>
+  <!-- Diagonal Motion Trails Behind Ball -->
+  <polygon points="188,290 86,392 210,312" fill="#ffffff"/>
+  <polygon points="214,316 124,410 236,334" fill="#ffffff"/>
+  <polygon points="244,334 172,414 266,346" fill="#ffffff"/>
+  <polygon points="168,264 78,350 184,282" fill="#ffffff"/>
+  <!-- White Cricket Ball Core -->
+  <circle cx="264" cy="256" r="80" fill="#ffffff" stroke="#0b1017" stroke-width="10"/>
+  <!-- Curved Cricket Ball Seam -->
+  <path d="M 214 206 Q 264 240 314 206" fill="none" stroke="#0b1017" stroke-width="8" stroke-linecap="round"/>
+  <path d="M 206 222 Q 264 260 322 222" fill="none" stroke="#0b1017" stroke-width="6" stroke-dasharray="10 8" stroke-linecap="round"/>
 </svg>

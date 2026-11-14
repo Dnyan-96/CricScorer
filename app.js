@@ -3728,8 +3728,21 @@ async function inspectStorageQuota() {
   }
 }
 
+function dismissSplashOverlay() {
+  const splash = document.getElementById('appSplashOverlay');
+  if (splash && !splash.classList.contains('splash-hidden')) {
+    splash.classList.add('splash-hidden');
+    setTimeout(() => splash.remove(), 500);
+  }
+}
+
 // App Launch
 document.addEventListener('DOMContentLoaded', () => {
+  const splash = document.getElementById('appSplashOverlay');
+  if (splash) {
+    splash.addEventListener('click', dismissSplashOverlay);
+    setTimeout(dismissSplashOverlay, 1550);
+  }
   // themeToggleBtn handled directly via onclick in index.html
 
   openDatabase()

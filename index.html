@@ -16,10 +16,52 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body data-theme="dark">
+  <!-- Opening Splash Screen Animation -->
+  <div id="appSplashOverlay" class="splash-overlay" aria-hidden="true">
+    <div class="splash-emblem-stage">
+      <div class="splash-glow-ring"></div>
+      <div class="splash-logo-wrap">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" class="cs-emblem-svg">
+  <!-- Bold Emerald 'C' Ring -->
+  <path d="M 86 35 A 36 36 0 1 0 86 85 L 72 73 A 18 18 0 1 1 72 47 Z" fill="#00c853"/>
+  <!-- Diagonal Motion Trails Behind Ball -->
+  <polygon points="44,68 20,92 49,73" fill="#ffffff"/>
+  <polygon points="50,74 29,96 55,78" fill="#ffffff"/>
+  <polygon points="57,78 40,97 62,81" fill="#ffffff"/>
+  <polygon points="39,62 18,82 43,66" fill="#ffffff"/>
+  <!-- White Cricket Ball Core -->
+  <circle cx="62" cy="60" r="19" fill="#ffffff" stroke="#0b1017" stroke-width="2.5"/>
+  <!-- Curved Cricket Ball Seam -->
+  <path d="M 50 48 Q 62 56 74 48" fill="none" stroke="#0b1017" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="M 48 52 Q 62 61 76 52" fill="none" stroke="#0b1017" stroke-width="1.5" stroke-dasharray="2.5 2" stroke-linecap="round"/>
+</svg>
+      </div>
+    </div>
+    <div class="splash-brand-footer">
+      <div class="splash-wordmark">Cric<span>Scorer</span></div>
+      <div class="splash-sub">OFFLINE-FIRST SCORE ENGINE</div>
+    </div>
+  </div>
+
   <!-- Top Navigation & Header -->
   <header class="top-nav">
     <div class="brand-cluster">
-      <div class="brand-logo">🏏</div>
+      <div class="brand-logo-badge">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" class="cs-emblem-svg">
+  <!-- Bold Emerald 'C' Ring -->
+  <path d="M 86 35 A 36 36 0 1 0 86 85 L 72 73 A 18 18 0 1 1 72 47 Z" fill="#00c853"/>
+  <!-- Diagonal Motion Trails Behind Ball -->
+  <polygon points="44,68 20,92 49,73" fill="#ffffff"/>
+  <polygon points="50,74 29,96 55,78" fill="#ffffff"/>
+  <polygon points="57,78 40,97 62,81" fill="#ffffff"/>
+  <polygon points="39,62 18,82 43,66" fill="#ffffff"/>
+  <!-- White Cricket Ball Core -->
+  <circle cx="62" cy="60" r="19" fill="#ffffff" stroke="#0b1017" stroke-width="2.5"/>
+  <!-- Curved Cricket Ball Seam -->
+  <path d="M 50 48 Q 62 56 74 48" fill="none" stroke="#0b1017" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="M 48 52 Q 62 61 76 52" fill="none" stroke="#0b1017" stroke-width="1.5" stroke-dasharray="2.5 2" stroke-linecap="round"/>
+</svg>
+      </div>
       <div>
         <div class="brand-name">Cric<span>Scorer</span></div>
         <small class="brand-tag">Offline-First Score Engine</small>
@@ -35,11 +77,30 @@
   <main id="mainApp">
     <!-- VIEW 1: MODERN HOME DASHBOARD -->
     <section id="dashboard" class="page active">
-      <!-- Stadium Welcome Banner -->
-      <div class="home-welcome-banner">
-        <div class="home-welcome-copy">
-          <h1>Welcome back!</h1>
-          <p>Your matches, teams and player performances</p>
+      <!-- Stadium Branded Home Logo Header Card -->
+      <div class="home-welcome-banner home-logo-header-card">
+        <div class="home-header-brand-row">
+          <div class="home-header-emblem">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" class="cs-emblem-svg">
+  <!-- Bold Emerald 'C' Ring -->
+  <path d="M 86 35 A 36 36 0 1 0 86 85 L 72 73 A 18 18 0 1 1 72 47 Z" fill="#00c853"/>
+  <!-- Diagonal Motion Trails Behind Ball -->
+  <polygon points="44,68 20,92 49,73" fill="#ffffff"/>
+  <polygon points="50,74 29,96 55,78" fill="#ffffff"/>
+  <polygon points="57,78 40,97 62,81" fill="#ffffff"/>
+  <polygon points="39,62 18,82 43,66" fill="#ffffff"/>
+  <!-- White Cricket Ball Core -->
+  <circle cx="62" cy="60" r="19" fill="#ffffff" stroke="#0b1017" stroke-width="2.5"/>
+  <!-- Curved Cricket Ball Seam -->
+  <path d="M 50 48 Q 62 56 74 48" fill="none" stroke="#0b1017" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="M 48 52 Q 62 61 76 52" fill="none" stroke="#0b1017" stroke-width="1.5" stroke-dasharray="2.5 2" stroke-linecap="round"/>
+</svg>
+          </div>
+          <div class="home-welcome-copy">
+            <div class="home-header-eyebrow">CRICSCORER MATCH CENTER</div>
+            <h1>Welcome back!</h1>
+            <p>Your matches, teams and player performances</p>
+          </div>
         </div>
         <svg class="home-welcome-art" viewBox="0 0 180 90" aria-hidden="true">
           <defs>
