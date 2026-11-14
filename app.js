@@ -1619,19 +1619,53 @@ async function renderLiveScorerView() {
   const sPart = striker ? (pInfo.contrib[striker.id] || { runs: 0, balls: 0 }) : { runs: 0, balls: 0 };
   const nsPart = nonStriker ? (pInfo.contrib[nonStriker.id] || { runs: 0, balls: 0 }) : { runs: 0, balls: 0 };
 
+  const totalMaxBalls = matchOvers * 6;
+  const ballsRem = Math.max(0, totalMaxBalls - stats.legalDeliveries);
+  const crr = stats.legalDeliveries > 0 ? (stats.totalRuns / (stats.legalDeliveries / 6)).toFixed(2) : '0.00';
+  const runsReq = activeMatch.target ? Math.max(0, activeMatch.target - stats.totalRuns) : '--';
+  const rrr = (activeMatch.target && ballsRem > 0) ? (runsReq / (ballsRem / 6)).toFixed(2) : '--';
+  const ppOvers = Math.max(1, Math.round(matchOvers * 0.3));
+  const currentOverFloat = stats.legalDeliveries / 6;
+  const phaseLabel = currentOverFloat < ppOvers
+    ? `🔥 <strong>Powerplay:</strong> 0.1 – ${ppOvers}.0 Overs`
+    : currentOverFloat >= (matchOvers * 0.75)
+      ? `⚡ <strong>Death Overs:</strong> Final Stretch`
+      : `🏏 <strong>Middle Overs:</strong> Building Momentum`;
+
   container.innerHTML = `
-    <!-- Top Match Header -->
-    <div class="score-hero-box">
-      <div class="match-vs-header">${escapeHTML(battingTeamName)} vs ${escapeHTML(bowlingTeamName)} (${activeMatch.isSuperOver ? 'Super Over' : 'Inn ' + activeMatch.innings.length})</div>
-      <div class="live-digits-row">
-        <span class="live-score-big">${stats.totalRuns} / ${stats.wickets}</span>
-        <span class="live-overs-big">(${stats.oversFormatted} / ${activeMatch.overs} ov)</span>
+    <!-- Top Match Header (Broadcast Hero Card) -->
+    <div class="scorer-broadcast-hero">
+      <div class="hlh-top-row">
+        <span class="broadcast-match-meta" style="font-size:11px; font-weight:800; letter-spacing:0.7px; text-transform:uppercase; color:var(--text-muted);">${escapeHTML(activeMatch.format || 'T20')} MATCH · ${activeMatch.isSuperOver ? 'Super Over' : (activeMatch.innings.length === 1 ? '1st Innings' : '2nd Innings')}</span>
+        <span class="scorer-live-pill"><span class="scorer-live-dot"></span> ${escapeHTML(activeMatch.status.toUpperCase())}</span>
       </div>
-      <div class="live-rates-row">
-        <span>CRR: <strong>${stats.legalDeliveries > 0 ? (stats.totalRuns / (stats.legalDeliveries / 6)).toFixed(2) : '0.00'}</strong></span>
-        <span>Target: <strong>${activeMatch.target ? activeMatch.target : '--'}</strong></span>
-        <span>Extras: <strong>${stats.extras.total}</strong></span>
+
+      <div class="hlh-teams-score-row">
+        <div class="hlh-team-col">
+          ${buildHomeTeamShieldSVG(battingTeamName, 'a')}
+          <span class="hlh-team-label">${escapeHTML(battingTeamName)}</span>
+        </div>
+
+        <div class="hlh-score-center">
+          <div class="hlh-big-score">${stats.totalRuns} / ${stats.wickets}</div>
+          <div class="hlh-overs-label">(${stats.oversFormatted} / ${matchOvers} ov)</div>
+        </div>
+
+        <div class="hlh-team-col">
+          ${buildHomeTeamShieldSVG(bowlingTeamName, 'b')}
+          <span class="hlh-team-label">${escapeHTML(bowlingTeamName)}</span>
+        </div>
       </div>
+
+      <div class="hlh-metrics-strip">
+        <div class="hlh-m-cell"><span>CRR</span><strong>${crr}</strong></div>
+        <div class="hlh-m-cell"><span>RRR</span><strong>${rrr}</strong></div>
+        <div class="hlh-m-cell"><span>Target</span><strong>${activeMatch.target || '--'}</strong></div>
+        <div class="hlh-m-cell"><span>Runs Req.</span><strong>${runsReq}</strong></div>
+        <div class="hlh-m-cell"><span>Balls Rem.</span><strong>${ballsRem}</strong></div>
+      </div>
+
+      <div class="scorer-phase-strip">${phaseLabel}</div>
       ${winProbHTML}
     </div>
 

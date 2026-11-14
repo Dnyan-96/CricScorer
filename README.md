@@ -2,7 +2,7 @@
 
 **Professional Offline-First Cricket Scoring & Scorecard Management PWA**
 
-## Updates in this release (v2.19 Pro Suite):
+## Updates in this release (v2.20 Pro Suite):
 - **Complete Cricket Dismissal & Delivery Edge Cases:**
   - Record **Completed Runs (`0`–`3`)**, **Delivery Type (`Legal`, `Wide +1`, `No-Ball +1`)**, and **Batters Crossed** directly inside the Wicket Modal.
   - **Retired Hurt Return:** Batters marked Retired Hurt can return to bat later in the innings.
@@ -23,13 +23,18 @@
 2. Commit and push:
    ```bash
    git add .
-   git commit -m "CricScorer v2.19 Pro Suite: full cricket edge cases, charts, MVP, ball log editor, and sharing"
+   git commit -m "CricScorer v2.20 Pro Suite: full cricket edge cases, charts, MVP, ball log editor, and sharing"
    git push origin main
    ```
 
-## Updates in v2.19 (Home Page UI Upgrade Only):
+## Updates in v2.20 (Home Page UI Upgrade Only):
 - **Stadium Welcome Banner:** Clean welcome banner (`Welcome back!`) with subtle floodlight & batter silhouette artwork in CricScorer's existing dark/light theme colors.
 - **Featured `LIVE MATCH IN PROGRESS` Card:** Pulsing live dot, format pill (`T20`), SVG team shields, centered score readout, 5-column telemetry grid (`CRR`, `RRR`, `Target`, `Runs Req.`, `Balls Rem.`), and full-width **`▶ Resume Scoring ⚡`** button.
 - **4-Tile Quick Actions & 4-Column Summary Metrics:** Quick cards for **Start Match**, **Add Player**, **Add Team**, and **Match History**, plus counters for **Total Matches**, **Teams**, **Players**, and **Completed**.
 - **Recent Matches & Top Performers Strip:** Live match badge with **`▶ Resume`** button and a 3-card spotlight for top run-scorers and wicket-takers.
 - **Live Scorer Console Preserved:** Kept the Live Scorer layout and functionality completely untouched.
+
+## Updates in v2.20 (Broadcast Scorer Header + Stadium Home UI):
+- **Updated Scorer Live Score Header Card:** Features match format & innings label, pulsing `LIVE` badge, SVG team shields (`Batting XI` vs `Bowling XI`), bold centered score readout, 5-column telemetry strip (`CRR`, `RRR`, `Target`, `Runs Req.`, `Balls Rem.`), Powerplay/phase bar, and Chase Win Probability meter.
+- **Preserved Existing Scorer Layout:** Kept Live Match Pulse & Commentary, Crease & Bowler dropdowns, Batting/Bowling tables, Partnership bar, Recent Deliveries, and Touch Keypad untouched.
+- **Includes Stadium Home Page UI:** Features the Welcome back banner, featured Live Match card, 4-tile Quick Actions, 4-column Summary Metrics, Recent Matches, and Top Performers spotlight.

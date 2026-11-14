@@ -2314,3 +2314,59 @@ body[data-theme="light"] .hlh-metrics-strip {
   font-weight: 900;
   color: var(--warning);
 }
+
+
+/* ==========================================
+   V2.20 SCORER BROADCAST HERO HEADER CARD
+   ========================================== */
+
+.scorer-broadcast-hero {
+  background: linear-gradient(160deg, var(--bg-surface), var(--bg-surface-alt));
+  border: 1.5px solid var(--primary);
+  border-radius: 16px;
+  padding: 13px 14px;
+  margin-bottom: 12px;
+  box-shadow: 0 6px 22px var(--primary-glow);
+}
+
+.scorer-live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--primary-glow);
+  border: 1px solid var(--primary);
+  color: var(--primary);
+  font-size: 10px;
+  font-weight: 900;
+  padding: 2px 9px;
+  border-radius: 20px;
+  letter-spacing: 0.7px;
+}
+
+.scorer-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 6px var(--primary);
+  animation: pulseHomeDot 1.4s infinite ease-in-out;
+}
+
+.scorer-phase-strip {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 10px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-main);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+}
+
+.scorer-phase-strip strong {
+  color: var(--warning);
+}
