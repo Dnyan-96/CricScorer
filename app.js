@@ -441,20 +441,47 @@ class CricketEngine {
 // 3. NAVIGATION & VIEW CONTROLLER (9 SECTIONS)
 // ==========================================
 
-function navigate(tabId) {
-  document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === tabId));
-  document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.nav === tabId));
+const VALID_TABS = ['dashboard', 'live-scorer', 'create-match', 'teams', 'players', 'history', 'statistics', 'settings', 'scorecard'];
 
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+function persistActiveTab(tabId) {
+  if (!VALID_TABS.includes(tabId)) return;
+  try {
+    sessionStorage.setItem('cricscorer_active_tab', tabId);
+    if (window.location.hash !== '#' + tabId) {
+      history.replaceState(null, '', '#' + tabId);
+    }
+  } catch (e) {}
+}
 
-  if (tabId === 'dashboard') renderDashboard();
-  if (tabId === 'live-scorer') renderLiveScorerView();
-  if (tabId === 'create-match') renderCreateMatchView();
-  if (tabId === 'teams') renderTeams();
-  if (tabId === 'players') renderPlayers();
-  if (tabId === 'history') renderHistory();
-  if (tabId === 'statistics') renderStatistics();
-  if (tabId === 'settings') renderSettings();
+function getSavedActiveTab() {
+  try {
+    const hashTab = (window.location.hash || '').replace('#', '').trim();
+    if (VALID_TABS.includes(hashTab)) return hashTab;
+    const storedTab = sessionStorage.getItem('cricscorer_active_tab');
+    if (VALID_TABS.includes(storedTab)) return storedTab;
+  } catch (e) {}
+  return 'dashboard';
+}
+
+function navigate(tabId, options = {}) {
+  const targetTab = VALID_TABS.includes(tabId) ? tabId : 'dashboard';
+  document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === targetTab));
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.nav === targetTab));
+
+  persistActiveTab(targetTab);
+
+  if (!options.preserveScroll) {
+    window.scrollTo({ top: 0, behavior: options.instant ? 'auto' : 'smooth' });
+  }
+
+  if (targetTab === 'dashboard') renderDashboard();
+  if (targetTab === 'live-scorer') renderLiveScorerView();
+  if (targetTab === 'create-match') renderCreateMatchView();
+  if (targetTab === 'teams') renderTeams();
+  if (targetTab === 'players') renderPlayers();
+  if (targetTab === 'history') renderHistory();
+  if (targetTab === 'statistics') renderStatistics();
+  if (targetTab === 'settings') renderSettings();
 }
 
 // ==========================================
@@ -1537,6 +1564,17 @@ function generateMatchInsights(inn, stats, match) {
 
 async function renderLiveScorerView() {
   const container = document.getElementById('liveScorerContainer');
+  if (!activeMatch && db) {
+    try {
+      const allMatches = await dbGetAll('matches');
+      const liveMatches = allMatches
+        .filter(m => m.status === 'Live' || m.status === 'In Progress')
+        .sort((a, b) => (b.updated || b.created || 0) - (a.updated || a.created || 0));
+      if (liveMatches.length > 0) {
+        activeMatch = liveMatches[0];
+      }
+    } catch (e) {}
+  }
   if (!activeMatch) {
     container.innerHTML = `
       <div class="empty-state">
@@ -1657,15 +1695,19 @@ async function renderLiveScorerView() {
         </div>
       </div>
 
-      <div class="hlh-metrics-strip">
+      <div class="hlh-metrics-strip" style="grid-template-columns: repeat(6, 1fr);">
         <div class="hlh-m-cell"><span>CRR</span><strong>${crr}</strong></div>
         <div class="hlh-m-cell"><span>RRR</span><strong>${rrr}</strong></div>
         <div class="hlh-m-cell"><span>Target</span><strong>${activeMatch.target || '--'}</strong></div>
         <div class="hlh-m-cell"><span>Runs Req.</span><strong>${runsReq}</strong></div>
         <div class="hlh-m-cell"><span>Balls Rem.</span><strong>${ballsRem}</strong></div>
+        <div class="hlh-m-cell"><span>Extras</span><strong>${stats.extras.total}</strong></div>
       </div>
 
-      <div class="scorer-phase-strip">${phaseLabel}</div>
+      <div class="scorer-phase-strip" style="justify-content:space-between; flex-wrap:wrap; gap:6px;">
+        <span>${phaseLabel}</span>
+        <span style="font-size:10px; font-weight:800; color:var(--primary); background:var(--primary-glow); border:1px solid var(--primary); padding:2px 7px; border-radius:20px;">Extras: ${stats.extras.total} (wd ${stats.extras.wides}, nb ${stats.extras.noballs}, b ${stats.extras.byes}, lb ${stats.extras.legbyes})</span>
+      </div>
       ${winProbHTML}
     </div>
 
@@ -3757,10 +3799,26 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   // themeToggleBtn handled directly via onclick in index.html
 
+  const initialTab = getSavedActiveTab();
+  if (initialTab && initialTab !== 'dashboard') {
+    document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === initialTab));
+    document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.nav === initialTab));
+  }
+
+  window.addEventListener('hashchange', () => {
+    const hashTab = getSavedActiveTab();
+    if (hashTab) navigate(hashTab, { instant: true });
+  });
+
   openDatabase()
     .then(async () => {
       await loadSavedSettings();
-      renderDashboard();
+      const restoredTab = getSavedActiveTab();
+      if (restoredTab && restoredTab !== 'dashboard') {
+        navigate(restoredTab, { instant: true });
+      } else {
+        renderDashboard();
+      }
       triggerAutoBackup();
     })
     .catch((err) => {
