@@ -2552,3 +2552,228 @@ body[data-theme="light"] .home-header-eyebrow {
 .home-logo-header-card .home-welcome-copy {
   max-width: 100%;
 }
+
+
+/* ==========================================
+   V2.22 FINALIZED HEADER, THEME TOGGLE & LEFT WATERMARK BANNER
+   ========================================== */
+
+.top-nav {
+  padding: 14px 16px;
+  min-height: 66px;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.topnav-telemetry-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.topnav-shimmer-border {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent 0%, rgba(0, 230, 118, 0.25) 25%, #00e676 50%, rgba(0, 230, 118, 0.25) 75%, transparent 100%);
+  background-size: 200% 100%;
+  animation: topNavLineShimmer 4s linear infinite;
+  z-index: 1;
+}
+
+@keyframes topNavLineShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.topnav-pulse-toast {
+  position: absolute;
+  top: 50%;
+  left: 52%;
+  transform: translate(-50%, -50%) scale(0.9);
+  background: rgba(11, 16, 23, 0.9);
+  border: 1px solid #00e676;
+  color: #00e676;
+  font-size: 9.5px;
+  font-weight: 900;
+  letter-spacing: 0.8px;
+  padding: 3px 9px;
+  border-radius: 20px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 3;
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+
+.topnav-pulse-toast.visible {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.top-nav .brand-cluster,
+.top-nav .header-actions {
+  position: relative;
+  z-index: 2;
+}
+
+.theme-svg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.theme-svg-btn:hover {
+  border-color: var(--primary);
+  box-shadow: 0 0 10px var(--primary-glow);
+}
+
+body[data-theme="dark"] .theme-svg-btn .icon-moon {
+  display: block;
+  color: #ffd54f;
+}
+body[data-theme="dark"] .theme-svg-btn .icon-sun {
+  display: none;
+}
+
+body[data-theme="light"] .theme-svg-btn .icon-moon {
+  display: none;
+}
+body[data-theme="light"] .theme-svg-btn .icon-sun {
+  display: block;
+  color: #f59e0b;
+}
+
+#dashboard.page.active {
+  padding-top: 16px;
+}
+
+.home-logo-header-card {
+  margin-bottom: 14px;
+}
+
+.home-card-animated-bg {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.bg-floodlight-beam {
+  position: absolute;
+  top: -20%;
+  width: 90px;
+  height: 160%;
+  background: linear-gradient(180deg, rgba(0, 230, 118, 0.22) 0%, rgba(0, 230, 118, 0.03) 65%, transparent 100%);
+  transform-origin: top center;
+  filter: blur(4px);
+}
+
+.bg-floodlight-beam.beam-1 {
+  right: 26%;
+  animation: sweepBeamLeft 6.5s ease-in-out infinite alternate;
+}
+
+.bg-floodlight-beam.beam-2 {
+  right: 8%;
+  animation: sweepBeamRight 7.5s ease-in-out infinite alternate;
+}
+
+@keyframes sweepBeamLeft {
+  0% { transform: rotate(16deg) scaleX(0.9); opacity: 0.45; }
+  100% { transform: rotate(32deg) scaleX(1.15); opacity: 0.85; }
+}
+
+@keyframes sweepBeamRight {
+  0% { transform: rotate(28deg) scaleX(1.1); opacity: 0.8; }
+  100% { transform: rotate(12deg) scaleX(0.85); opacity: 0.4; }
+}
+
+.bg-radar-ring {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  border-radius: 50%;
+  border: 1px dashed rgba(0, 230, 118, 0.24);
+  transform: translateY(-50%);
+}
+
+.bg-radar-ring.ring-outer {
+  width: 118px;
+  height: 118px;
+  animation: spinStadiumRadar 22s linear infinite;
+}
+
+.bg-radar-ring.ring-inner {
+  width: 82px;
+  height: 82px;
+  right: 30px;
+  border-color: rgba(163, 230, 53, 0.25);
+  animation: spinStadiumRadarRev 15s linear infinite;
+}
+
+@keyframes spinStadiumRadar {
+  from { transform: translateY(-50%) rotate(0deg); }
+  to { transform: translateY(-50%) rotate(360deg); }
+}
+
+@keyframes spinStadiumRadarRev {
+  from { transform: translateY(-50%) rotate(360deg); }
+  to { transform: translateY(-50%) rotate(0deg); }
+}
+
+/* Left-anchored translucent faded emblem watermark */
+.bg-floating-emblem-watermark {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  width: 84px;
+  height: 84px;
+  transform: translateY(-50%);
+  opacity: 0.17;
+  animation: floatLeftWatermark 5.2s ease-in-out infinite alternate;
+  z-index: 0;
+}
+
+.bg-floating-emblem-watermark .cs-emblem-svg {
+  width: 100%;
+  height: 100%;
+}
+
+@keyframes floatLeftWatermark {
+  0% { transform: translateY(-52%) scale(0.97) rotate(-3deg); opacity: 0.14; }
+  100% { transform: translateY(-48%) scale(1.04) rotate(3deg); opacity: 0.22; }
+}
+
+.bg-particle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #00e676;
+  box-shadow: 0 0 6px #00e676;
+  opacity: 0;
+  animation: particleDrift 4.8s ease-in-out infinite;
+}
+
+.bg-particle.p1 { right: 34%; bottom: 18%; animation-delay: 0s; }
+.bg-particle.p2 { right: 20%; bottom: 26%; animation-delay: 1.6s; }
+.bg-particle.p3 { right: 10%; bottom: 14%; animation-delay: 3.1s; }
+
+@keyframes particleDrift {
+  0% { transform: translateY(0) scale(0.6); opacity: 0; }
+  45% { opacity: 0.85; }
+  100% { transform: translateY(-34px) scale(1.1); opacity: 0; }
+}
+
+.home-logo-header-card .home-header-brand-row {
+  max-width: 76%;
+  padding-left: 6px;
+}

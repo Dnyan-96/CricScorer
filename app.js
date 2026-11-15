@@ -3756,7 +3756,188 @@ document.addEventListener('DOMContentLoaded', () => {
       showToast('Running in local storage fallback mode.');
     });
 
+  initTopNavTelemetry();
+
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
   }
 });
+
+
+// Interactive Top Nav Cricket Telemetry & Parabolic Seam-Ball Trajectory
+function initTopNavTelemetry() {
+  const header = document.getElementById('interactiveTopNav');
+  const canvas = document.getElementById('topNavTelemetryCanvas');
+  const toastEl = document.getElementById('topNavPulseToast');
+  if (!header || !canvas) return;
+  const ctx = canvas.getContext('2d');
+
+  let width = 0;
+  let height = 0;
+  let dpr = Math.min(window.devicePixelRatio || 1, 2);
+  let t = 0;
+  let burstEnergy = 0;
+  let burstX = 0;
+  let burstY = 0;
+  let toastTimer = null;
+
+  const callouts = [
+    '⚡ 6! MAXIMUM BOUNDARY PULSE',
+    '🏏 SWEET SPOT TIMING',
+    '🔥 POWERPLAY SURGE',
+    '✨ CRICKET TELEMETRY ACTIVE'
+  ];
+  let calloutIdx = 0;
+
+  const motes = Array.from({ length: 14 }, (_, i) => ({
+    x: (i * 0.073) % 1,
+    y: (i * 0.137) % 1,
+    r: 0.8 + (i % 3) * 0.55,
+    vx: 0.00045 + (i % 4) * 0.00018,
+    phase: i * 0.8
+  }));
+
+  function resize() {
+    const rect = header.getBoundingClientRect();
+    width = rect.width;
+    height = rect.height;
+    canvas.width = Math.max(1, Math.floor(width * dpr));
+    canvas.height = Math.max(1, Math.floor(height * dpr));
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  header.addEventListener('click', (e) => {
+    if (e.target.closest('button')) return;
+    const rect = header.getBoundingClientRect();
+    burstX = e.clientX - rect.left;
+    burstY = e.clientY - rect.top;
+    burstEnergy = 1.0;
+
+    if (toastEl) {
+      toastEl.textContent = callouts[calloutIdx % callouts.length];
+      calloutIdx++;
+      toastEl.classList.add('visible');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toastEl.classList.remove('visible'), 1300);
+    }
+  });
+
+  function renderFrame() {
+    const isLight = document.body.getAttribute('data-theme') === 'light';
+    const primaryRgb = isLight ? '15, 138, 95' : '0, 230, 118';
+    const accentRgb = isLight ? '101, 163, 13' : '163, 230, 53';
+
+    ctx.clearRect(0, 0, width, height);
+
+    // Subtle stadium horizon glow
+    const grad = ctx.createRadialGradient(width * 0.62, height * 0.5, 4, width * 0.62, height * 0.5, width * 0.48);
+    grad.addColorStop(0, `rgba(${primaryRgb}, ${isLight ? 0.08 : 0.13})`);
+    grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, width, height);
+
+    // Boundary radar arcs on right
+    const rx = width - 46;
+    const ry = height * 0.52;
+    ctx.save();
+    ctx.strokeStyle = `rgba(${primaryRgb}, ${isLight ? 0.14 : 0.18})`;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 5]);
+    ctx.beginPath();
+    ctx.arc(rx, ry, 28, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(rx, ry, 44, t * 0.35, t * 0.35 + Math.PI * 1.35);
+    ctx.stroke();
+    ctx.restore();
+
+    // Floating stadium motes
+    motes.forEach((m) => {
+      m.x = (m.x + m.vx * (1 + burstEnergy * 1.8)) % 1;
+      const mx = m.x * width;
+      const my = m.y * height + Math.sin(t * 1.6 + m.phase) * 3;
+      const alpha = (isLight ? 0.22 : 0.35) + 0.15 * Math.sin(t * 2 + m.phase);
+      ctx.fillStyle = `rgba(${primaryRgb}, ${alpha})`;
+      ctx.beginPath();
+      ctx.arc(mx, my, m.r, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // Parabolic Seam-Ball Trajectory
+    const startX = width * 0.36;
+    const endX = width * 0.84;
+    const baseY = height - 10;
+    const peakY = 12;
+    const progress = (t * (0.24 + burstEnergy * 0.32)) % 1;
+
+    // Dotted trajectory path
+    ctx.save();
+    ctx.strokeStyle = `rgba(${primaryRgb}, ${isLight ? 0.16 : 0.22})`;
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([3, 4]);
+    ctx.beginPath();
+    for (let s = 0; s <= 24; s++) {
+      const p = s / 24;
+      const px = startX + (endX - startX) * p;
+      const py = baseY - Math.sin(p * Math.PI) * (baseY - peakY);
+      if (s === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    // Glowing trail & seam-spinning cricket ball
+    const bx = startX + (endX - startX) * progress;
+    const by = baseY - Math.sin(progress * Math.PI) * (baseY - peakY);
+
+    const trailGrad = ctx.createLinearGradient(bx - 34, by + 6, bx, by);
+    trailGrad.addColorStop(0, 'rgba(0,0,0,0)');
+    trailGrad.addColorStop(1, `rgba(${accentRgb}, ${isLight ? 0.35 : 0.55})`);
+    ctx.strokeStyle = trailGrad;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(Math.max(startX, bx - 32), baseY - Math.sin(Math.max(0, progress - 0.14) * Math.PI) * (baseY - peakY));
+    ctx.lineTo(bx, by);
+    ctx.stroke();
+
+    // Ball core
+    ctx.save();
+    ctx.translate(bx, by);
+    ctx.rotate(t * 4.5);
+    ctx.fillStyle = isLight ? '#0f8a5f' : '#ffffff';
+    ctx.shadowColor = `rgba(${primaryRgb}, 0.75)`;
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.arc(0, 0, 3.6, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Seam line
+    ctx.strokeStyle = isLight ? '#ffffff' : '#0b1017';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(0, 0, 2.2, -0.7, 0.7);
+    ctx.stroke();
+    ctx.restore();
+
+    // Interactive Boundary Pulse shockwave on tap
+    if (burstEnergy > 0.01) {
+      const radius = (1 - burstEnergy) * 75 + 8;
+      ctx.save();
+      ctx.strokeStyle = `rgba(${primaryRgb}, ${burstEnergy * 0.75})`;
+      ctx.lineWidth = 2 * burstEnergy;
+      ctx.beginPath();
+      ctx.arc(burstX, burstY, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+      burstEnergy *= 0.93;
+    }
+
+    t += 0.016;
+    requestAnimationFrame(renderFrame);
+  }
+
+  requestAnimationFrame(renderFrame);
+}
