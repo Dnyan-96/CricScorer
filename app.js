@@ -3740,8 +3740,20 @@ function dismissSplashOverlay() {
 document.addEventListener('DOMContentLoaded', () => {
   const splash = document.getElementById('appSplashOverlay');
   if (splash) {
-    splash.addEventListener('click', dismissSplashOverlay);
-    setTimeout(dismissSplashOverlay, 1550);
+    let alreadyShown = false;
+    try {
+      alreadyShown = sessionStorage.getItem('cricscorer_splash_shown') === '1';
+      if (!alreadyShown) {
+        sessionStorage.setItem('cricscorer_splash_shown', '1');
+      }
+    } catch (e) {}
+
+    if (alreadyShown) {
+      splash.remove();
+    } else {
+      splash.addEventListener('click', dismissSplashOverlay);
+      setTimeout(dismissSplashOverlay, 1550);
+    }
   }
   // themeToggleBtn handled directly via onclick in index.html
 
@@ -3826,8 +3838,8 @@ function initTopNavTelemetry() {
 
   function renderFrame() {
     const isLight = document.body.getAttribute('data-theme') === 'light';
-    const primaryRgb = isLight ? '15, 138, 95' : '0, 230, 118';
-    const accentRgb = isLight ? '101, 163, 13' : '163, 230, 53';
+    const primaryRgb = isLight ? '6, 95, 70' : '0, 230, 118';
+    const accentRgb = isLight ? '220, 38, 38' : '163, 230, 53';
 
     ctx.clearRect(0, 0, width, height);
 
@@ -3842,8 +3854,8 @@ function initTopNavTelemetry() {
     const rx = width - 46;
     const ry = height * 0.52;
     ctx.save();
-    ctx.strokeStyle = `rgba(${primaryRgb}, ${isLight ? 0.14 : 0.18})`;
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = `rgba(${primaryRgb}, ${isLight ? 0.32 : 0.18})`;
+    ctx.lineWidth = isLight ? 1.3 : 1;
     ctx.setLineDash([4, 5]);
     ctx.beginPath();
     ctx.arc(rx, ry, 28, 0, Math.PI * 2);
@@ -3859,7 +3871,7 @@ function initTopNavTelemetry() {
       m.x = (m.x + m.vx * (1 + burstEnergy * 1.8)) % 1;
       const mx = m.x * width;
       const my = m.y * height + Math.sin(t * 1.6 + m.phase) * 3;
-      const alpha = (isLight ? 0.22 : 0.35) + 0.15 * Math.sin(t * 2 + m.phase);
+      const alpha = (isLight ? 0.38 : 0.35) + 0.15 * Math.sin(t * 2 + m.phase);
       ctx.fillStyle = `rgba(${primaryRgb}, ${alpha})`;
       ctx.beginPath();
       ctx.arc(mx, my, m.r, 0, Math.PI * 2);
@@ -3875,8 +3887,8 @@ function initTopNavTelemetry() {
 
     // Dotted trajectory path
     ctx.save();
-    ctx.strokeStyle = `rgba(${primaryRgb}, ${isLight ? 0.16 : 0.22})`;
-    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = `rgba(${primaryRgb}, ${isLight ? 0.34 : 0.22})`;
+    ctx.lineWidth = isLight ? 1.4 : 1.2;
     ctx.setLineDash([3, 4]);
     ctx.beginPath();
     for (let s = 0; s <= 24; s++) {
@@ -3895,30 +3907,30 @@ function initTopNavTelemetry() {
 
     const trailGrad = ctx.createLinearGradient(bx - 34, by + 6, bx, by);
     trailGrad.addColorStop(0, 'rgba(0,0,0,0)');
-    trailGrad.addColorStop(1, `rgba(${accentRgb}, ${isLight ? 0.35 : 0.55})`);
+    trailGrad.addColorStop(1, `rgba(${accentRgb}, ${isLight ? 0.6 : 0.55})`);
     ctx.strokeStyle = trailGrad;
-    ctx.lineWidth = 2.5;
+    ctx.lineWidth = isLight ? 2.8 : 2.5;
     ctx.beginPath();
     ctx.moveTo(Math.max(startX, bx - 32), baseY - Math.sin(Math.max(0, progress - 0.14) * Math.PI) * (baseY - peakY));
     ctx.lineTo(bx, by);
     ctx.stroke();
 
-    // Ball core
+    // Ball core (Crimson red leather ball in Light Mode, glowing white in Dark Mode)
     ctx.save();
     ctx.translate(bx, by);
     ctx.rotate(t * 4.5);
-    ctx.fillStyle = isLight ? '#0f8a5f' : '#ffffff';
-    ctx.shadowColor = `rgba(${primaryRgb}, 0.75)`;
+    ctx.fillStyle = isLight ? '#dc2626' : '#ffffff';
+    ctx.shadowColor = isLight ? 'rgba(220, 38, 38, 0.55)' : `rgba(${primaryRgb}, 0.75)`;
     ctx.shadowBlur = 8;
     ctx.beginPath();
-    ctx.arc(0, 0, 3.6, 0, Math.PI * 2);
+    ctx.arc(0, 0, isLight ? 4.2 : 3.6, 0, Math.PI * 2);
     ctx.fill();
 
     // Seam line
     ctx.strokeStyle = isLight ? '#ffffff' : '#0b1017';
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 1.1;
     ctx.beginPath();
-    ctx.arc(0, 0, 2.2, -0.7, 0.7);
+    ctx.arc(0, 0, 2.3, -0.7, 0.7);
     ctx.stroke();
     ctx.restore();
 

@@ -2777,3 +2777,61 @@ body[data-theme="light"] .theme-svg-btn .icon-sun {
   max-width: 76%;
   padding-left: 6px;
 }
+
+
+/* ==========================================
+   V2.23 LIGHT MODE ANIMATION CONTRAST BOOST
+   ========================================== */
+
+body[data-theme="light"] .home-logo-header-card {
+  background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 55%, #ffffff 100%);
+  border-color: #059669;
+  box-shadow: 0 6px 20px rgba(5, 150, 105, 0.14);
+}
+
+body[data-theme="light"] .bg-floodlight-beam {
+  background: linear-gradient(180deg, rgba(5, 150, 105, 0.28) 0%, rgba(16, 185, 129, 0.06) 65%, transparent 100%);
+}
+
+body[data-theme="light"] .bg-radar-ring {
+  border-color: rgba(6, 95, 70, 0.34);
+}
+
+body[data-theme="light"] .bg-radar-ring.ring-inner {
+  border-color: rgba(5, 150, 105, 0.38);
+}
+
+body[data-theme="light"] .bg-floating-emblem-watermark {
+  opacity: 0.28;
+  filter: drop-shadow(0 2px 6px rgba(6, 95, 70, 0.18));
+}
+
+body[data-theme="light"] .bg-floating-emblem-watermark .cs-emblem-svg path:first-child {
+  fill: #059669;
+}
+
+body[data-theme="light"] .bg-floating-emblem-watermark .cs-emblem-svg circle,
+body[data-theme="light"] .bg-floating-emblem-watermark .cs-emblem-svg polygon {
+  fill: #064e3b;
+  stroke: #064e3b;
+}
+
+body[data-theme="light"] .bg-floating-emblem-watermark .cs-emblem-svg path:nth-last-child(-n+2) {
+  stroke: #ffffff;
+}
+
+body[data-theme="light"] .bg-particle {
+  background: #059669;
+  box-shadow: 0 0 6px rgba(5, 150, 105, 0.7);
+}
+
+body[data-theme="light"] .topnav-pulse-toast {
+  background: rgba(255, 255, 255, 0.96);
+  border-color: #059669;
+  color: #065f46;
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.22);
+}
+
+body[data-theme="light"] .topnav-shimmer-border {
+  background: linear-gradient(90deg, transparent 0%, rgba(5, 150, 105, 0.3) 25%, #059669 50%, rgba(5, 150, 105, 0.3) 75%, transparent 100%);
+}
