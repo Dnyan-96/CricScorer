@@ -1706,7 +1706,7 @@ async function renderLiveScorerView() {
 
       <div class="scorer-phase-strip" style="justify-content:space-between; flex-wrap:wrap; gap:6px;">
         <span>${phaseLabel}</span>
-        <span style="font-size:10px; font-weight:800; color:var(--primary); background:var(--primary-glow); border:1px solid var(--primary); padding:2px 7px; border-radius:20px;">Extras: ${stats.extras.total} (wd ${stats.extras.wides}, nb ${stats.extras.noballs}, b ${stats.extras.byes}, lb ${stats.extras.legbyes})</span>
+        <span style="font-size:10px; font-weight:800; color:var(--primary); background:var(--primary-glow); border:1px solid var(--primary); padding:2px 7px; border-radius:20px;">Extras: ${stats.extras.total || 0} (wd ${stats.extras.wide || 0}, nb ${stats.extras.noBall || 0}, b ${stats.extras.bye || 0}, lb ${stats.extras.legBye || 0}${(stats.extras.penalty || 0) > 0 ? `, pen ${stats.extras.penalty}` : ''})</span>
       </div>
       ${winProbHTML}
     </div>
