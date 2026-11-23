@@ -1781,7 +1781,7 @@ async function renderLiveScorerView() {
         </thead>
         <tbody>
           <tr>
-            <td><span class="striker-indicator">★</span> <strong>${escapeHTML(striker?.name || 'Striker')}</strong></td>
+            <td><span class="striker-indicator">★</span> <strong>${escapeHTML(striker?.name || 'Striker')}</strong>${renderBatterMilestoneBadges(strikerStats.runs)}</td>
             <td><strong>${strikerStats.runs}</strong></td>
             <td>${strikerStats.balls}</td>
             <td>${strikerStats.fours}</td>
@@ -1789,7 +1789,7 @@ async function renderLiveScorerView() {
             <td>${strikerStats.strikeRate}</td>
           </tr>
           <tr>
-            <td>&nbsp;&nbsp;${escapeHTML(nonStriker?.name || 'Non-Striker')}</td>
+            <td>&nbsp;&nbsp;${escapeHTML(nonStriker?.name || 'Non-Striker')}${renderBatterMilestoneBadges(nonStrikerStats.runs)}</td>
             <td><strong>${nonStrikerStats.runs}</strong></td>
             <td>${nonStrikerStats.balls}</td>
             <td>${nonStrikerStats.fours}</td>
@@ -1878,6 +1878,200 @@ async function renderLiveScorerView() {
   `;
 }
 
+
+// ==========================================
+// BROADCAST EVENT ANIMATIONS ENGINE (4, 6, WICKETS, 50/100)
+// ==========================================
+let broadcastFxEnabled = true;
+try {
+  const savedFx = localStorage.getItem('cricscorer_fx_enabled');
+  if (savedFx === '0') broadcastFxEnabled = false;
+} catch (e) {}
+
+const broadcastFxQueue = [];
+let isBroadcastFxPlaying = false;
+
+function syncFxToggleBtn() {
+  const btn = document.getElementById('fxToggleBtn');
+  if (!btn) return;
+  btn.textContent = broadcastFxEnabled ? '✨ FX: ON' : '✨ FX: OFF';
+  btn.classList.toggle('active', broadcastFxEnabled);
+}
+
+function toggleBroadcastFx() {
+  broadcastFxEnabled = !broadcastFxEnabled;
+  try {
+    localStorage.setItem('cricscorer_fx_enabled', broadcastFxEnabled ? '1' : '0');
+  } catch (e) {}
+  syncFxToggleBtn();
+  showToast(broadcastFxEnabled ? 'On-screen celebration animations enabled' : 'On-screen celebration animations muted');
+}
+
+function getBatterRunsFromInnings(inn, batterId) {
+  if (!inn || !batterId) return 0;
+  const stats = CricketEngine.calculateInnings(inn, inn.squad, inn.bowlingSquad);
+  const found = stats.batters.find(b => b.id === batterId);
+  return found ? found.runs : 0;
+}
+
+function buildWicketGraphicSVG(dismissalType) {
+  if (dismissalType === 'lbw') {
+    return `
+      <svg width="96" height="62" viewBox="0 0 100 66">
+        <rect x="30" y="14" width="6" height="44" rx="2" fill="#e2e8f0"/>
+        <rect x="47" y="14" width="6" height="44" rx="2" fill="#e2e8f0"/>
+        <rect x="64" y="14" width="6" height="44" rx="2" fill="#e2e8f0"/>
+        <circle class="fx-lbw-dot" cx="50" cy="24" r="5" fill="#ef4444" stroke="#ffffff" stroke-width="1.5"/>
+        <circle class="fx-lbw-dot" cx="50" cy="36" r="5" fill="#ef4444" stroke="#ffffff" stroke-width="1.5"/>
+        <circle class="fx-lbw-dot" cx="50" cy="48" r="5" fill="#ef4444" stroke="#ffffff" stroke-width="1.5"/>
+      </svg>`;
+  }
+  if (dismissalType === 'caught' || dismissalType === 'caughtAndBowled') {
+    return `
+      <svg width="96" height="62" viewBox="0 0 100 66">
+        <circle cx="50" cy="33" r="24" fill="rgba(255,255,255,0.12)" stroke="#fca5a5" stroke-width="2" stroke-dasharray="4 3"/>
+        <circle cx="50" cy="33" r="13" fill="#ffffff"/>
+        <path d="M 41 25 Q 50 32 59 25" fill="none" stroke="#dc2626" stroke-width="2.2" stroke-linecap="round"/>
+        <path d="M 41 41 Q 50 34 59 41" fill="none" stroke="#dc2626" stroke-width="2.2" stroke-linecap="round"/>
+      </svg>`;
+  }
+  // Bowled, Run Out, Stumped, Hit Wicket & other special dismissals
+  return `
+    <svg width="104" height="64" viewBox="0 0 104 68">
+      <rect x="32" y="18" width="6" height="44" rx="2" fill="#f8fafc"/>
+      <rect x="49" y="18" width="6" height="44" rx="2" fill="#f8fafc"/>
+      <rect class="fx-stump-tilt" x="66" y="18" width="6" height="44" rx="2" fill="#fca5a5"/>
+      <rect class="fx-bail-left" x="31" y="13" width="19" height="4" rx="2" fill="#fbbf24"/>
+      <rect class="fx-bail-right" x="54" y="13" width="19" height="4" rx="2" fill="#fbbf24"/>
+    </svg>`;
+}
+
+function buildFxParticlesHTML(colors) {
+  let out = '';
+  const count = 18;
+  for (let i = 0; i < count; i++) {
+    const angle = (Math.PI * 2 * i) / count;
+    const dist = 75 + (i % 3) * 34;
+    const dx = Math.round(Math.cos(angle) * dist);
+    const dy = Math.round(Math.sin(angle) * dist);
+    const color = colors[i % colors.length];
+    out += `<span class="fx-particle" style="--dx:${dx}px; --dy:${dy}px; background:${color}; box-shadow:0 0 8px ${color};"></span>`;
+  }
+  return out;
+}
+
+function queueBroadcastFx(eventPayload) {
+  if (!broadcastFxEnabled) return;
+  broadcastFxQueue.push(eventPayload);
+  if (!isBroadcastFxPlaying) {
+    playNextBroadcastFx();
+  }
+}
+
+function playNextBroadcastFx() {
+  const stage = document.getElementById('broadcastFxStage');
+  if (!stage || broadcastFxQueue.length === 0) {
+    isBroadcastFxPlaying = false;
+    if (stage) stage.innerHTML = '';
+    return;
+  }
+
+  isBroadcastFxPlaying = true;
+  const ev = broadcastFxQueue.shift();
+  let cardHTML = '';
+
+  if (ev.type === 'FOUR') {
+    cardHTML = `
+      <div class="fx-card-shell fx-four">
+        <div class="fx-laser-sweep"></div>
+        ${buildFxParticlesHTML(['#34d399', '#38bdf8', '#ffffff'])}
+        <div class="fx-kicker">BOUNDARY LASER</div>
+        <div class="fx-big-title">FOUR! • +4</div>
+        <div class="fx-sub-detail">${escapeHTML(ev.batterName || 'Batter')} (${ev.runs || 0}*)</div>
+        <div class="fx-badge-pill">CRACKING SHOT TO THE FENCE</div>
+      </div>`;
+  } else if (ev.type === 'SIX') {
+    cardHTML = `
+      <div class="fx-card-shell fx-six">
+        ${buildFxParticlesHTML(['#fbbf24', '#34d399', '#f97316', '#ffffff'])}
+        <div class="fx-kicker">MAXIMUM TRAJECTORY</div>
+        <div class="fx-big-title">SIX! • +6</div>
+        <div class="fx-sub-detail">${escapeHTML(ev.batterName || 'Batter')} (${ev.runs || 0}*)</div>
+        <div class="fx-badge-pill">OUT OF THE GROUND!</div>
+      </div>`;
+  } else if (ev.type === 'WICKET') {
+    const dismissalLabels = {
+      bowled: 'CLEAN BOWLED!',
+      caught: 'CAUGHT OUT!',
+      caughtAndBowled: 'CAUGHT & BOWLED!',
+      lbw: 'LBW • PLUMB IN FRONT!',
+      runOut: 'DIRECT HIT • RUN OUT!',
+      stumped: 'LIGHTNING STUMPED!',
+      hitWicket: 'HIT WICKET!',
+      retiredHurt: 'RETIRED HURT',
+      retiredOut: 'RETIRED OUT',
+      obstructingTheField: 'OBSTRUCTING THE FIELD',
+      hitBallTwice: 'HIT THE BALL TWICE',
+      timedOut: 'TIMED OUT'
+    };
+    const title = dismissalLabels[ev.dismissal] || 'WICKET!';
+    cardHTML = `
+      <div class="fx-card-shell fx-wicket">
+        ${buildFxParticlesHTML(['#f87171', '#fbbf24', '#ffffff'])}
+        <div class="fx-svg-stage">${buildWicketGraphicSVG(ev.dismissal)}</div>
+        <div class="fx-kicker">DISMISSAL BREAKTHROUGH</div>
+        <div class="fx-big-title" style="font-size:23px;">${title}</div>
+        <div class="fx-sub-detail">${escapeHTML(ev.batterName || 'Batter')} — ${ev.batterRuns || 0} (${ev.batterBalls || 0}b)</div>
+        ${ev.creditText ? `<div class="fx-badge-pill">${escapeHTML(ev.creditText)}</div>` : ''}
+      </div>`;
+  } else if (ev.type === 'MILESTONE_50') {
+    cardHTML = `
+      <div class="fx-card-shell fx-milestone">
+        ${buildFxParticlesHTML(['#38bdf8', '#34d399', '#ffffff'])}
+        <div class="fx-kicker">BATTER MILESTONE</div>
+        <div class="fx-big-title" style="font-size:24px;">🌟 HALF-CENTURY!</div>
+        <div class="fx-sub-detail">${escapeHTML(ev.batterName || 'Batter')} reaches ${ev.runs}* (${ev.balls} balls)</div>
+        <div class="fx-badge-pill">50★ SCORECARD BADGE UNLOCKED</div>
+      </div>`;
+  } else if (ev.type === 'MILESTONE_100') {
+    cardHTML = `
+      <div class="fx-card-shell fx-century">
+        ${buildFxParticlesHTML(['#facc15', '#fb923c', '#34d399', '#ffffff'])}
+        <div class="fx-kicker">SENSATIONAL INNINGS</div>
+        <div class="fx-big-title" style="font-size:24px;">👑 CENTURY! 100</div>
+        <div class="fx-sub-detail">${escapeHTML(ev.batterName || 'Batter')} powers to ${ev.runs}* (${ev.balls} balls)</div>
+        <div class="fx-badge-pill">100👑 SCORECARD CROWN UNLOCKED</div>
+      </div>`;
+  }
+
+  stage.innerHTML = cardHTML;
+  setTimeout(() => {
+    playNextBroadcastFx();
+  }, 2350);
+}
+
+function checkAndQueueBatterMilestones(inn, batterId, prevRuns) {
+  if (!inn || !batterId) return;
+  const stats = CricketEngine.calculateInnings(inn, inn.squad, inn.bowlingSquad);
+  const b = stats.batters.find(p => p.id === batterId);
+  if (!b) return;
+  if (prevRuns < 50 && b.runs >= 50 && b.runs < 100) {
+    queueBroadcastFx({ type: 'MILESTONE_50', batterName: b.name, runs: b.runs, balls: b.balls });
+  } else if (prevRuns < 100 && b.runs >= 100) {
+    queueBroadcastFx({ type: 'MILESTONE_100', batterName: b.name, runs: b.runs, balls: b.balls });
+  }
+}
+
+function renderBatterMilestoneBadges(runs) {
+  if (runs >= 100) {
+    return `<span class="sc-milestone-badge sc-milestone-100" title="Century (100+)">100👑</span>`;
+  }
+  if (runs >= 50) {
+    return `<span class="sc-milestone-badge sc-milestone-50" title="Half-Century (50+)">50★</span>`;
+  }
+  return '';
+}
+
 // Ball Recording Logic
 async function recordBallEvent(runs) {
   if (!activeMatch) return;
@@ -1888,9 +2082,12 @@ async function recordBallEvent(runs) {
     return;
   }
 
+  const scoringBatterId = inn.strikerId;
+  const prevBatterRuns = getBatterRunsFromInnings(inn, scoringBatterId);
+
   const ball = {
     id: generateId(),
-    batterId: inn.strikerId,
+    batterId: scoringBatterId,
     nonStrikerId: inn.nonStrikerId,
     bowlerId: inn.bowlerId,
     batRuns: runs,
@@ -1903,6 +2100,15 @@ async function recordBallEvent(runs) {
   };
 
   inn.balls.push(ball);
+
+  const updatedBatterRuns = prevBatterRuns + runs;
+  const batterName = inn.squad.find(p => p.id === scoringBatterId)?.name || 'Batter';
+  if (runs === 4) {
+    queueBroadcastFx({ type: 'FOUR', batterName, runs: updatedBatterRuns });
+  } else if (runs === 6) {
+    queueBroadcastFx({ type: 'SIX', batterName, runs: updatedBatterRuns });
+  }
+  checkAndQueueBatterMilestones(inn, scoringBatterId, prevBatterRuns);
 
   // Auto Strike Rotation on Odd Runs
   if (runs % 2 !== 0) {
@@ -2043,8 +2249,20 @@ function openExtraModal(extraType) {
       timestamp: Date.now()
     };
 
+    const extraBatterId = inn.strikerId;
+    const prevExtraBatRuns = getBatterRunsFromInnings(inn, extraBatterId);
     inn.balls.push(ball);
     triggerHaptic(addRuns >= 4 ? 'boundary' : 'normal');
+
+    if (batRuns > 0) {
+      const bName = inn.squad.find(p => p.id === extraBatterId)?.name || 'Batter';
+      if (batRuns === 4) {
+        queueBroadcastFx({ type: 'FOUR', batterName: bName, runs: prevExtraBatRuns + batRuns });
+      } else if (batRuns === 6) {
+        queueBroadcastFx({ type: 'SIX', batterName: bName, runs: prevExtraBatRuns + batRuns });
+      }
+      checkAndQueueBatterMilestones(inn, extraBatterId, prevExtraBatRuns);
+    }
 
     if (addRuns % 2 !== 0) {
       const temp = inn.strikerId;
@@ -2220,6 +2438,16 @@ function openWicketModal() {
       if (inn.strikerId === outBatterId) inn.strikerId = incomingId;
       else inn.nonStrikerId = incomingId;
 
+      const retStats = CricketEngine.calculateInnings(inn, inn.squad, inn.bowlingSquad);
+      const retBatterObj = retStats.batters.find(b => b.id === outBatterId);
+      queueBroadcastFx({
+        type: 'WICKET',
+        dismissal: type,
+        batterName: retBatterObj?.name || 'Batter',
+        batterRuns: retBatterObj?.runs || 0,
+        batterBalls: retBatterObj?.balls || 0,
+        creditText: type === 'retiredHurt' ? 'Retired Hurt (Can Return)' : 'Retired Out'
+      });
       showToast(type === 'retiredHurt' ? 'Batter retired hurt (can return later)' : 'Batter retired out');
       await saveActiveMatch();
       renderLiveScorerView();
@@ -2234,6 +2462,9 @@ function openWicketModal() {
     const batRuns = isWide ? 0 : completedRuns;
     const extraRuns = isWide ? completedRuns : 0;
     const extraTotal = compExtra + extraRuns;
+
+    const strikerBeforeWicket = inn.strikerId;
+    const prevStrikerRunsBeforeWicket = getBatterRunsFromInnings(inn, strikerBeforeWicket);
 
     inn.balls.push({
       id: generateId(),
@@ -2252,6 +2483,29 @@ function openWicketModal() {
     });
 
     triggerHaptic('wicket');
+
+    if (batRuns > 0) {
+      checkAndQueueBatterMilestones(inn, strikerBeforeWicket, prevStrikerRunsBeforeWicket);
+    }
+
+    const postWicketStats = CricketEngine.calculateInnings(inn, inn.squad, inn.bowlingSquad);
+    const outBatterObj = postWicketStats.batters.find(b => b.id === outBatterId);
+    const bowlerName = inn.bowlingSquad.find(b => b.id === inn.bowlerId)?.name || 'Bowler';
+    const fielderName = fielderId ? (inn.bowlingSquad.find(b => b.id === fielderId)?.name || '') : '';
+    const playersLookup = {};
+    [...(inn.squad || []), ...(inn.bowlingSquad || [])].forEach(p => { playersLookup[p.id] = p.name; });
+    const creditText = outBatterObj
+      ? formatDismissalText(outBatterObj, playersLookup, playersLookup)
+      : (fielderName ? `${fielderName} / b ${bowlerName}` : `b ${bowlerName}`);
+
+    queueBroadcastFx({
+      type: 'WICKET',
+      dismissal: type,
+      batterName: outBatterObj?.name || (inn.squad.find(p => p.id === outBatterId)?.name || 'Batter'),
+      batterRuns: outBatterObj?.runs || 0,
+      batterBalls: outBatterObj?.balls || 0,
+      creditText
+    });
 
     if (inn.strikerId === outBatterId) inn.strikerId = incomingId;
     else inn.nonStrikerId = incomingId;
@@ -2899,8 +3153,8 @@ async function viewDetailedScorecard(matchId) {
                 ${battedList.length ? battedList.map(b => `
                   <tr>
                     <td>
-                      <strong>${escapeHTML(b.name)}</strong>${(!b.isOut && (b.id === inn.strikerId || b.id === inn.nonStrikerId)) ? '*' : ''}
-                      <br><small class="muted">${formatDismissalText(b, playersMap, playersMap)}</small>
+                      <strong>${escapeHTML(b.name)}</strong>${(!b.isOut && (b.id === inn.strikerId || b.id === inn.nonStrikerId)) ? '*' : ''}${renderBatterMilestoneBadges(b.runs)}
+                      <br>${b.isOut ? `<span class="sc-dismissal-pill">${escapeHTML(formatDismissalText(b, playersMap, playersMap))}</span>` : `<small class="muted">${formatDismissalText(b, playersMap, playersMap)}</small>`}
                     </td>
                     <td><strong>${b.runs}</strong></td>
                     <td>${b.balls}</td>
@@ -3826,6 +4080,7 @@ document.addEventListener('DOMContentLoaded', () => {
       showToast('Running in local storage fallback mode.');
     });
 
+  syncFxToggleBtn();
   initTopNavTelemetry();
 
   if ('serviceWorker' in navigator) {

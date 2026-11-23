@@ -2835,3 +2835,263 @@ body[data-theme="light"] .topnav-pulse-toast {
 body[data-theme="light"] .topnav-shimmer-border {
   background: linear-gradient(90deg, transparent 0%, rgba(5, 150, 105, 0.3) 25%, #059669 50%, rgba(5, 150, 105, 0.3) 75%, transparent 100%);
 }
+
+
+/* ==========================================
+   V2.26 BROADCAST EVENT ANIMATIONS & SCORECARD BADGES
+   ========================================== */
+
+.fx-toggle-btn {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.fx-toggle-btn.active {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-glow);
+}
+
+.broadcast-fx-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 9990;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.fx-card-shell {
+  position: relative;
+  min-width: 270px;
+  max-width: 90vw;
+  padding: 18px 22px 16px;
+  border-radius: 20px;
+  text-align: center;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 22px 54px rgba(0, 0, 0, 0.55);
+  animation: fxPopInOut 2.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  overflow: hidden;
+}
+
+@keyframes fxPopInOut {
+  0% { opacity: 0; transform: scale(0.72) translateY(24px); }
+  14% { opacity: 1; transform: scale(1.04) translateY(0); }
+  22% { opacity: 1; transform: scale(1) translateY(0); }
+  82% { opacity: 1; transform: scale(1) translateY(0); }
+  100% { opacity: 0; transform: scale(0.92) translateY(-18px); }
+}
+
+/* FOUR Theme */
+.fx-card-shell.fx-four {
+  background: linear-gradient(145deg, rgba(6, 78, 59, 0.94), rgba(14, 116, 144, 0.94));
+  border: 2px solid #34d399;
+  color: #ffffff;
+}
+
+.fx-laser-sweep {
+  position: absolute;
+  top: 0;
+  left: -60%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(52, 211, 153, 0.45), transparent);
+  transform: skewX(-22deg);
+  animation: fxLaserRun 1.1s ease-out infinite;
+}
+
+@keyframes fxLaserRun {
+  0% { left: -60%; }
+  100% { left: 130%; }
+}
+
+/* SIX Theme */
+.fx-card-shell.fx-six {
+  background: linear-gradient(145deg, rgba(120, 53, 15, 0.95), rgba(6, 95, 70, 0.95));
+  border: 2px solid #fbbf24;
+  color: #ffffff;
+}
+
+/* WICKET Theme */
+.fx-card-shell.fx-wicket {
+  background: linear-gradient(145deg, rgba(127, 29, 29, 0.96), rgba(30, 27, 36, 0.96));
+  border: 2px solid #f87171;
+  color: #ffffff;
+}
+
+/* MILESTONE 50 / 100 Theme */
+.fx-card-shell.fx-milestone {
+  background: linear-gradient(145deg, rgba(30, 58, 138, 0.95), rgba(6, 95, 70, 0.95));
+  border: 2px solid #38bdf8;
+  color: #ffffff;
+}
+
+.fx-card-shell.fx-century {
+  background: linear-gradient(145deg, rgba(113, 63, 18, 0.96), rgba(88, 28, 135, 0.95));
+  border: 2px solid #facc15;
+  color: #ffffff;
+}
+
+.fx-kicker {
+  font-size: 10.5px;
+  font-weight: 900;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  opacity: 0.9;
+  margin-bottom: 4px;
+}
+
+.fx-big-title {
+  font-size: 28px;
+  font-weight: 950;
+  letter-spacing: 0.6px;
+  line-height: 1.08;
+  text-shadow: 0 3px 12px rgba(0, 0, 0, 0.45);
+}
+
+.fx-sub-detail {
+  margin-top: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.fx-badge-pill {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 3px 11px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.6px;
+  background: rgba(0, 0, 0, 0.34);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+}
+
+.fx-svg-stage {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 6px;
+}
+
+/* Wicket Stump & Bail Animation */
+.fx-bail-left {
+  transform-origin: 36px 26px;
+  animation: flyBailLeft 0.95s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.fx-bail-right {
+  transform-origin: 64px 26px;
+  animation: flyBailRight 0.95s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.fx-stump-tilt {
+  transform-origin: 66px 76px;
+  animation: tiltOffStump 0.75s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.fx-lbw-dot {
+  animation: pulseLbwDot 0.6s ease-in-out infinite alternate;
+}
+
+@keyframes flyBailLeft {
+  0% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+  100% { transform: translate(-22px, -24px) rotate(-145deg); opacity: 0.85; }
+}
+@keyframes flyBailRight {
+  0% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+  100% { transform: translate(24px, -26px) rotate(160deg); opacity: 0.85; }
+}
+@keyframes tiltOffStump {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(24deg) translateX(4px); }
+}
+@keyframes pulseLbwDot {
+  from { transform: scale(0.9); opacity: 0.75; }
+  to { transform: scale(1.18); opacity: 1; }
+}
+
+/* Radial Particle Burst */
+.fx-particle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: fxBurstParticle 1.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes fxBurstParticle {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.35);
+  }
+}
+
+/* Scorecard Milestone & Special Dismissal Badges */
+.sc-milestone-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 5px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 900;
+  letter-spacing: 0.4px;
+  vertical-align: middle;
+}
+
+.sc-milestone-50 {
+  background: rgba(14, 165, 233, 0.18);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.45);
+}
+
+.sc-milestone-100 {
+  background: rgba(250, 204, 21, 0.22);
+  color: #facc15;
+  border: 1px solid rgba(250, 204, 21, 0.55);
+}
+
+body[data-theme="light"] .sc-milestone-50 {
+  background: #e0f2fe;
+  color: #0369a1;
+  border-color: #7dd3fc;
+}
+
+body[data-theme="light"] .sc-milestone-100 {
+  background: #fef9c3;
+  color: #854d0e;
+  border-color: #fde047;
+}
+
+.sc-dismissal-pill {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
+}
+
+body[data-theme="light"] .sc-dismissal-pill {
+  background: #fee2e2;
+  color: #b91c1c;
+}
