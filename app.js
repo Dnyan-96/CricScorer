@@ -441,7 +441,7 @@ class CricketEngine {
 // 3. NAVIGATION & VIEW CONTROLLER (9 SECTIONS)
 // ==========================================
 
-const VALID_TABS = ['dashboard', 'live-scorer', 'create-match', 'teams', 'players', 'history', 'statistics', 'settings', 'scorecard'];
+const VALID_TABS = ['dashboard', 'tournaments', 'live-scorer', 'create-match', 'teams', 'players', 'history', 'statistics', 'settings', 'scorecard'];
 
 function persistActiveTab(tabId) {
   if (!VALID_TABS.includes(tabId)) return;
@@ -475,6 +475,7 @@ function navigate(tabId, options = {}) {
   }
 
   if (targetTab === 'dashboard') renderDashboard();
+  if (targetTab === 'tournaments') renderTournamentsView();
   if (targetTab === 'live-scorer') renderLiveScorerView();
   if (targetTab === 'create-match') renderCreateMatchView();
   if (targetTab === 'teams') renderTeams();
@@ -517,6 +518,20 @@ async function renderDashboard() {
   if (playerCountEl) playerCountEl.textContent = players.length;
   const completedCountEl = document.getElementById('statCompletedMatches');
   if (completedCountEl) completedCountEl.textContent = completedCount;
+
+  try {
+    const tourns = await getAllTournaments();
+    const tSubEl = document.getElementById('homeTournamentSummaryText');
+    if (tSubEl) {
+      if (tourns.length > 0) {
+        const totalFixtures = tourns.reduce((sum, t) => sum + (t.fixtures?.length || 0), 0);
+        const doneFixtures = tourns.reduce((sum, t) => sum + (t.fixtures?.filter(f => f.status === 'Completed').length || 0), 0);
+        tSubEl.textContent = `${tourns.length} active tournament${tourns.length === 1 ? '' : 's'} · ${doneFixtures}/${totalFixtures} fixtures completed`;
+      } else {
+        tSubEl.textContent = 'Add teams, auto-generate schedules & track live Points Table / NRR';
+      }
+    }
+  } catch (e) {}
 
   // Check for an Active Live Match
   const liveMatches = matches.filter(m => m.status === 'Live');
@@ -1812,7 +1827,7 @@ async function renderLiveScorerView() {
         <tbody>
           <tr>
             <td>
-              ⚡ <strong>${escapeHTML(bowler?.name || 'Bowler')}</strong>
+              ⚡ <strong>${escapeHTML(bowler?.name || 'Bowler')}</strong>${bowlerStats.wickets >= 5 ? `<span class="sc-5w-badge" title="5-Wicket Haul">5W🔥</span>` : ''}
               ${isBowlerCapped ? `<br><span class="bowler-cap-warn">⚠️ Quota Reached (${maxBowlerOvers} ov max)</span>` : ''}
             </td>
             <td>${bowlerStats.oversFormatted}</td>
@@ -2042,6 +2057,35 @@ function playNextBroadcastFx() {
         <div class="fx-sub-detail">${escapeHTML(ev.batterName || 'Batter')} powers to ${ev.runs}* (${ev.balls} balls)</div>
         <div class="fx-badge-pill">100👑 SCORECARD CROWN UNLOCKED</div>
       </div>`;
+  } else if (ev.type === 'TEAM_MILESTONE') {
+    cardHTML = `
+      <div class="fx-card-shell fx-team-milestone">
+        <div class="fx-laser-sweep"></div>
+        ${buildFxParticlesHTML(['#34d399', '#38bdf8', '#fbbf24', '#ffffff'])}
+        <div class="fx-kicker">TEAM SCORE MILESTONE</div>
+        <div class="fx-big-title" style="font-size:24px;">🏟️ TEAM ${ev.milestone} UP!</div>
+        <div class="fx-sub-detail">${escapeHTML(ev.teamName || 'Batting Team')} · ${ev.scoreStr} (${ev.oversStr} ov)</div>
+        <div class="fx-badge-pill">CURRENT RUN RATE: ${ev.crr}</div>
+      </div>`;
+  } else if (ev.type === 'FIVE_WICKET') {
+    cardHTML = `
+      <div class="fx-card-shell fx-five-wicket">
+        ${buildFxParticlesHTML(['#e879f9', '#fbbf24', '#f87171', '#ffffff'])}
+        <div class="fx-kicker">SENSATIONAL SPELL</div>
+        <div class="fx-big-title" style="font-size:23px;">🎳 5-WICKET HAUL!</div>
+        <div class="fx-sub-detail">${escapeHTML(ev.bowlerName || 'Bowler')} · ${ev.figures} (${ev.overs} ov)</div>
+        <div class="fx-badge-pill">5W🔥 BOWLING BADGE UNLOCKED</div>
+      </div>`;
+  } else if (ev.type === 'ALL_OUT') {
+    cardHTML = `
+      <div class="fx-card-shell fx-all-out">
+        ${buildFxParticlesHTML(['#fb7185', '#fbbf24', '#ffffff'])}
+        <div class="fx-svg-stage">${buildWicketGraphicSVG('bowled')}</div>
+        <div class="fx-kicker">INNINGS CONCLUDED</div>
+        <div class="fx-big-title" style="font-size:24px;">💥 ALL OUT!</div>
+        <div class="fx-sub-detail">${escapeHTML(ev.teamName || 'Batting Team')} · ${ev.scoreStr} (${ev.oversStr} ov)</div>
+        <div class="fx-badge-pill">${escapeHTML(ev.subNote || 'END OF BATTING INNINGS')}</div>
+      </div>`;
   }
 
   stage.innerHTML = cardHTML;
@@ -2059,6 +2103,60 @@ function checkAndQueueBatterMilestones(inn, batterId, prevRuns) {
     queueBroadcastFx({ type: 'MILESTONE_50', batterName: b.name, runs: b.runs, balls: b.balls });
   } else if (prevRuns < 100 && b.runs >= 100) {
     queueBroadcastFx({ type: 'MILESTONE_100', batterName: b.name, runs: b.runs, balls: b.balls });
+  }
+}
+
+
+function checkAndQueueTeamScoreMilestones(inn, prevTeamRuns, teamName) {
+  if (!inn) return;
+  const stats = CricketEngine.calculateInnings(inn, inn.squad, inn.bowlingSquad);
+  const newRuns = stats.totalRuns;
+  if (newRuns <= prevTeamRuns) return;
+  const prevBucket = Math.floor(prevTeamRuns / 50);
+  const newBucket = Math.floor(newRuns / 50);
+  if (newBucket > prevBucket && newBucket >= 1) {
+    const milestone = newBucket * 50;
+    const crr = stats.legalDeliveries > 0 ? ((stats.totalRuns / stats.legalDeliveries) * 6).toFixed(2) : '0.00';
+    queueBroadcastFx({
+      type: 'TEAM_MILESTONE',
+      milestone,
+      teamName: teamName || 'Batting Team',
+      scoreStr: `${stats.totalRuns}/${stats.wickets}`,
+      oversStr: stats.oversFormatted,
+      crr
+    });
+  }
+}
+
+function checkAndQueueBowlerFiveWicketHaul(inn, bowlerId, prevBowlerWickets) {
+  if (!inn || !bowlerId) return;
+  const stats = CricketEngine.calculateInnings(inn, inn.squad, inn.bowlingSquad);
+  const bo = stats.bowlers.find(b => b.id === bowlerId);
+  if (!bo) return;
+  if (prevBowlerWickets < 5 && bo.wickets >= 5) {
+    queueBroadcastFx({
+      type: 'FIVE_WICKET',
+      bowlerName: bo.name,
+      figures: `${bo.wickets}/${bo.runsConceded}`,
+      overs: bo.oversFormatted
+    });
+  }
+}
+
+function checkAndQueueAllOutFx(inn, teamName) {
+  if (!inn) return;
+  const stats = CricketEngine.calculateInnings(inn, inn.squad, inn.bowlingSquad);
+  const squadCount = (inn.squad || []).length;
+  const maxWickets = squadCount >= 2 ? (squadCount - 1) : 10;
+  if (stats.wickets >= maxWickets) {
+    const isFirstInnings = activeMatch && activeMatch.innings && activeMatch.innings.length === 1;
+    queueBroadcastFx({
+      type: 'ALL_OUT',
+      teamName: teamName || 'Batting Team',
+      scoreStr: `${stats.totalRuns}/${stats.wickets}`,
+      oversStr: stats.oversFormatted,
+      subNote: isFirstInnings ? `TARGET FOR CHASE: ${stats.totalRuns + 1}` : '2ND INNINGS COMPLETED'
+    });
   }
 }
 
@@ -2109,6 +2207,13 @@ async function recordBallEvent(runs) {
     queueBroadcastFx({ type: 'SIX', batterName, runs: updatedBatterRuns });
   }
   checkAndQueueBatterMilestones(inn, scoringBatterId, prevBatterRuns);
+  if (runs > 0) {
+    const prevTeamRuns = Math.max(0, CricketEngine.calculateInnings(inn, inn.squad, inn.bowlingSquad).totalRuns - runs);
+    dbGetAll('teams').then(allT => {
+      const batTName = allT.find(t => t.id === inn.batting)?.name || 'Batting Team';
+      checkAndQueueTeamScoreMilestones(inn, prevTeamRuns, batTName);
+    }).catch(() => checkAndQueueTeamScoreMilestones(inn, prevTeamRuns, 'Batting Team'));
+  }
 
   // Auto Strike Rotation on Odd Runs
   if (runs % 2 !== 0) {
@@ -2251,8 +2356,15 @@ function openExtraModal(extraType) {
 
     const extraBatterId = inn.strikerId;
     const prevExtraBatRuns = getBatterRunsFromInnings(inn, extraBatterId);
+    const prevExtraTeamRuns = CricketEngine.calculateInnings(inn, inn.squad, inn.bowlingSquad).totalRuns;
     inn.balls.push(ball);
     triggerHaptic(addRuns >= 4 ? 'boundary' : 'normal');
+    if ((batRuns + extraTotal) > 0) {
+      dbGetAll('teams').then(allT => {
+        const batTName = allT.find(t => t.id === inn.batting)?.name || 'Batting Team';
+        checkAndQueueTeamScoreMilestones(inn, prevExtraTeamRuns, batTName);
+      }).catch(() => checkAndQueueTeamScoreMilestones(inn, prevExtraTeamRuns, 'Batting Team'));
+    }
 
     if (batRuns > 0) {
       const bName = inn.squad.find(p => p.id === extraBatterId)?.name || 'Batter';
@@ -2465,6 +2577,10 @@ function openWicketModal() {
 
     const strikerBeforeWicket = inn.strikerId;
     const prevStrikerRunsBeforeWicket = getBatterRunsFromInnings(inn, strikerBeforeWicket);
+    const preWicketStats = CricketEngine.calculateInnings(inn, inn.squad, inn.bowlingSquad);
+    const prevTeamRunsBeforeWicket = preWicketStats.totalRuns;
+    const activeBowlerIdForWicket = inn.bowlerId;
+    const prevBowlerWickets = preWicketStats.bowlers.find(b => b.id === activeBowlerIdForWicket)?.wickets || 0;
 
     inn.balls.push({
       id: generateId(),
@@ -2506,6 +2622,22 @@ function openWicketModal() {
       batterBalls: outBatterObj?.balls || 0,
       creditText
     });
+
+    if ((batRuns + extraTotal) > 0) {
+      dbGetAll('teams').then(allT => {
+        const batTName = allT.find(t => t.id === inn.batting)?.name || 'Batting Team';
+        checkAndQueueTeamScoreMilestones(inn, prevTeamRunsBeforeWicket, batTName);
+      }).catch(() => {});
+    }
+
+    if (type !== 'runOut' && type !== 'retiredHurt' && type !== 'retiredOut' && type !== 'obstructingTheField' && type !== 'hitBallTwice' && type !== 'timedOut') {
+      checkAndQueueBowlerFiveWicketHaul(inn, activeBowlerIdForWicket, prevBowlerWickets);
+    }
+
+    dbGetAll('teams').then(allT => {
+      const batTName = allT.find(t => t.id === inn.batting)?.name || 'Batting Team';
+      checkAndQueueAllOutFx(inn, batTName);
+    }).catch(() => checkAndQueueAllOutFx(inn, 'Batting Team'));
 
     if (inn.strikerId === outBatterId) inn.strikerId = incomingId;
     else inn.nonStrikerId = incomingId;
@@ -2833,9 +2965,12 @@ Would you like to start a 1-Over Super Over tie-breaker?`)) {
   activeMatch.result = resultStr;
 
   await saveActiveMatch();
+  if (activeMatch.tournamentId && activeMatch.tournamentFixtureId) {
+    await syncTournamentFixtureCompletion(activeMatch, stats1, stats2);
+  }
   triggerAutoBackup();
   showToast('Match marked as Completed.');
-  navigate('history');
+  navigate(activeMatch.tournamentId ? 'tournaments' : 'history');
 }
 
 async function saveActiveMatch() {
@@ -3197,7 +3332,7 @@ async function viewDetailedScorecard(matchId) {
               <tbody>
                 ${stats.bowlers.filter(bo => bo.legalBalls > 0 || bo.wides > 0 || bo.noBalls > 0).map(bo => `
                   <tr>
-                    <td><strong>${escapeHTML(bo.name)}</strong></td>
+                    <td><strong>${escapeHTML(bo.name)}</strong>${bo.wickets >= 5 ? `<span class="sc-5w-badge" title="5-Wicket Haul">5W🔥</span>` : ''}</td>
                     <td>${bo.oversFormatted}</td>
                     <td>${bo.maidens || 0}</td>
                     <td>${bo.runsConceded}</td>
@@ -4265,4 +4400,700 @@ function initTopNavTelemetry() {
   }
 
   requestAnimationFrame(renderFrame);
+}
+
+
+// ==========================================
+// TOURNAMENTS & LEAGUES MODULE (SCHEDULE, TEAMS, POINTS TABLE & NRR)
+// ==========================================
+const TOURNAMENTS_STORAGE_KEY = 'cricscorer_tournaments_v1';
+let selectedTournamentId = null;
+
+async function getAllTournaments() {
+  if (!db) return [];
+  try {
+    const item = await dbGet('settings', TOURNAMENTS_STORAGE_KEY);
+    return Array.isArray(item?.val) ? item.val : [];
+  } catch (e) {
+    try {
+      const settings = await dbGetAll('settings');
+      const found = settings.find(s => s.key === TOURNAMENTS_STORAGE_KEY);
+      return Array.isArray(found?.val) ? found.val : [];
+    } catch (err) {
+      return [];
+    }
+  }
+}
+
+async function saveAllTournaments(list) {
+  if (!db) return;
+  await dbPut('settings', { key: TOURNAMENTS_STORAGE_KEY, val: list });
+  triggerAutoBackup();
+}
+
+function generateRoundRobinFixtures(teamIds, doubleRound = false) {
+  const fixtures = [];
+  let matchNum = 1;
+  const rounds = doubleRound ? 2 : 1;
+  for (let r = 0; r < rounds; r++) {
+    for (let i = 0; i < teamIds.length; i++) {
+      for (let j = i + 1; j < teamIds.length; j++) {
+        const teamA = r === 0 ? teamIds[i] : teamIds[j];
+        const teamB = r === 0 ? teamIds[j] : teamIds[i];
+        fixtures.push({
+          id: generateId(),
+          matchNumber: matchNum++,
+          roundLabel: doubleRound ? `League Stage (Leg ${r + 1})` : 'League Stage',
+          teamAId: teamA,
+          teamBId: teamB,
+          status: 'Scheduled',
+          matchId: null,
+          result: '',
+          winnerTeamId: null
+        });
+      }
+    }
+  }
+  return fixtures;
+}
+
+function generateKnockoutFixtures(teamIds) {
+  const fixtures = [];
+  let matchNum = 1;
+  const total = teamIds.length;
+  const roundName = total <= 2 ? 'Grand Final' : total <= 4 ? 'Semi-Final' : 'Quarter-Final';
+  for (let i = 0; i < total; i += 2) {
+    if (i + 1 < total) {
+      fixtures.push({
+        id: generateId(),
+        matchNumber: matchNum++,
+        roundLabel: roundName,
+        teamAId: teamIds[i],
+        teamBId: teamIds[i + 1],
+        status: 'Scheduled',
+        matchId: null,
+        result: '',
+        winnerTeamId: null
+      });
+    } else {
+      fixtures.push({
+        id: generateId(),
+        matchNumber: matchNum++,
+        roundLabel: `${roundName} (Bye)`,
+        teamAId: teamIds[i],
+        teamBId: teamIds[0],
+        status: 'Scheduled',
+        matchId: null,
+        result: '',
+        winnerTeamId: null
+      });
+    }
+  }
+  return fixtures;
+}
+
+function computeTournamentStandings(tournament, teamsMap, allMatches) {
+  const table = {};
+  (tournament.teamIds || []).forEach(tid => {
+    table[tid] = {
+      teamId: tid,
+      teamName: teamsMap[tid] || 'Team',
+      played: 0,
+      won: 0,
+      lost: 0,
+      tied: 0,
+      points: 0,
+      runsFor: 0,
+      oversFacedFloat: 0,
+      runsAgainst: 0,
+      oversBowledFloat: 0,
+      nrr: 0
+    };
+  });
+
+  (tournament.fixtures || []).forEach(fx => {
+    if (fx.status !== 'Completed') return;
+    const m = allMatches.find(item => item.id === fx.matchId);
+    const rowA = table[fx.teamAId];
+    const rowB = table[fx.teamBId];
+    if (!rowA || !rowB) return;
+
+    rowA.played += 1;
+    rowB.played += 1;
+
+    if (fx.winnerTeamId === fx.teamAId) {
+      rowA.won += 1;
+      rowA.points += 2;
+      rowB.lost += 1;
+    } else if (fx.winnerTeamId === fx.teamBId) {
+      rowB.won += 1;
+      rowB.points += 2;
+      rowA.lost += 1;
+    } else {
+      rowA.tied += 1;
+      rowB.tied += 1;
+      rowA.points += 1;
+      rowB.points += 1;
+    }
+
+    if (m && Array.isArray(m.innings) && m.innings.length >= 1) {
+      const maxOv = m.overs || tournament.overs || 20;
+      m.innings.forEach(inn => {
+        const st = CricketEngine.calculateInnings(inn, inn.squad, inn.bowlingSquad);
+        const squadCount = (inn.squad || []).length;
+        const maxWkts = squadCount >= 2 ? (squadCount - 1) : 10;
+        const isAllOut = st.wickets >= maxWkts;
+        const oversUsed = isAllOut ? maxOv : (st.legalDeliveries / 6);
+
+        if (table[inn.batting]) {
+          table[inn.batting].runsFor += st.totalRuns;
+          table[inn.batting].oversFacedFloat += oversUsed;
+        }
+        if (table[inn.bowling]) {
+          table[inn.bowling].runsAgainst += st.totalRuns;
+          table[inn.bowling].oversBowledFloat += oversUsed;
+        }
+      });
+    }
+  });
+
+  const rows = Object.values(table).map(r => {
+    const forRate = r.oversFacedFloat > 0 ? (r.runsFor / r.oversFacedFloat) : 0;
+    const againstRate = r.oversBowledFloat > 0 ? (r.runsAgainst / r.oversBowledFloat) : 0;
+    r.nrr = forRate - againstRate;
+    return r;
+  });
+
+  rows.sort((a, b) => (b.points - a.points) || (b.nrr - a.nrr) || (b.won - a.won));
+  return rows;
+}
+
+async function syncTournamentFixtureCompletion(matchObj, stats1, stats2) {
+  const tournaments = await getAllTournaments();
+  const tIdx = tournaments.findIndex(t => t.id === matchObj.tournamentId);
+  if (tIdx === -1) return;
+
+  const tourn = tournaments[tIdx];
+  const fIdx = (tourn.fixtures || []).findIndex(f => f.id === matchObj.tournamentFixtureId);
+  if (fIdx === -1) return;
+
+  const inn1 = matchObj.innings[0];
+  let winnerId = null;
+  if (stats2) {
+    if (stats2.totalRuns >= (stats1.totalRuns + 1)) winnerId = inn1.bowling;
+    else if (stats1.totalRuns > stats2.totalRuns) winnerId = inn1.batting;
+  }
+
+  tourn.fixtures[fIdx].status = 'Completed';
+  tourn.fixtures[fIdx].matchId = matchObj.id;
+  tourn.fixtures[fIdx].result = matchObj.result || 'Completed';
+  tourn.fixtures[fIdx].winnerTeamId = winnerId;
+
+  await saveAllTournaments(tournaments);
+}
+
+async function renderTournamentsView() {
+  const container = document.getElementById('tournamentsContainer');
+  if (!container) return;
+
+  const [tournaments, teams, allMatches] = await Promise.all([
+    getAllTournaments(),
+    dbGetAll('teams'),
+    dbGetAll('matches')
+  ]);
+
+  const teamsMap = {};
+  teams.forEach(t => { teamsMap[t.id] = t.name; });
+
+  if (!tournaments.length) {
+    container.innerHTML = `
+      <div class="empty-state" style="padding:26px 16px;">
+        <div style="font-size:34px; margin-bottom:8px;">🏆</div>
+        <h3 style="margin-bottom:6px;">No Tournaments Created Yet</h3>
+        <p class="muted" style="margin-bottom:14px;">Create a league or knockout cup, add competing teams, auto-generate match schedules, and track live points &amp; NRR.</p>
+        <button class="btn btn-primary" onclick="openCreateTournamentModal()">＋ Create Your First Tournament</button>
+      </div>
+    `;
+    return;
+  }
+
+  if (!selectedTournamentId || !tournaments.some(t => t.id === selectedTournamentId)) {
+    selectedTournamentId = tournaments[0].id;
+  }
+
+  const activeTourn = tournaments.find(t => t.id === selectedTournamentId) || tournaments[0];
+  const standings = computeTournamentStandings(activeTourn, teamsMap, allMatches);
+  const completedCount = (activeTourn.fixtures || []).filter(f => f.status === 'Completed').length;
+  const totalFixtures = (activeTourn.fixtures || []).length;
+
+  container.innerHTML = `
+    <!-- Tournament Switcher Pills -->
+    <div class="tourn-selector-strip">
+      ${tournaments.map(t => `
+        <button type="button" class="tourn-pill-tab ${t.id === activeTourn.id ? 'active' : ''}" onclick="selectActiveTournament('${t.id}')">
+          🏆 ${escapeHTML(t.name)}
+        </button>
+      `).join('')}
+    </div>
+
+    <!-- Active Tournament Hero Card -->
+    <div class="tourn-hero-card">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+        <div>
+          <div class="eyebrow" style="color:var(--primary); margin-bottom:3px;">${escapeHTML(activeTourn.format || 'T20')} · ${escapeHTML(activeTourn.stageType === 'knockout' ? 'KNOCKOUT CUP' : 'ROUND-ROBIN LEAGUE')}</div>
+          <h2 style="font-size:19px; font-weight:950; margin:0 0 4px;">${escapeHTML(activeTourn.name)}</h2>
+          <p class="muted" style="font-size:12px; margin:0;">${(activeTourn.teamIds || []).length} Teams · ${completedCount}/${totalFixtures} Matches Played · ${activeTourn.overs || 20} Overs/side</p>
+        </div>
+        <div style="display:flex; gap:6px;">
+          <button type="button" class="btn btn-secondary" style="padding:6px 10px; font-size:11px;" onclick="openAddTeamToTournamentModal('${activeTourn.id}')">＋ Team</button>
+          <button type="button" class="btn btn-secondary" style="padding:6px 10px; font-size:11px; color:var(--danger);" onclick="deleteTournamentPrompt('${activeTourn.id}')">🗑️</button>
+        </div>
+      </div>
+
+      <div class="tourn-team-chip-row">
+        ${(activeTourn.teamIds || []).map(tid => `
+          <span class="tourn-team-chip">🛡️ ${escapeHTML(teamsMap[tid] || 'Team')}</span>
+        `).join('')}
+      </div>
+    </div>
+
+    <!-- Live Points Table & NRR -->
+    <div class="section-title-row">
+      <h2>📊 Points Table &amp; NRR</h2>
+      <span class="muted" style="font-size:11px;">Win = 2 pts · Tie = 1 pt</span>
+    </div>
+    <div class="card" style="padding:10px; margin-bottom:16px; overflow-x:auto;">
+      <table class="crease-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Team</th>
+            <th>M</th>
+            <th>W</th>
+            <th>L</th>
+            <th>NRR</th>
+            <th>PTS</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${standings.map((row, idx) => `
+            <tr>
+              <td><strong>${idx + 1}</strong></td>
+              <td><strong>${escapeHTML(row.teamName)}</strong></td>
+              <td>${row.played}</td>
+              <td>${row.won}</td>
+              <td>${row.lost}</td>
+              <td style="font-weight:700; color:${row.nrr >= 0 ? 'var(--primary)' : 'var(--danger)'};">${row.nrr >= 0 ? '+' : ''}${row.nrr.toFixed(3)}</td>
+              <td><strong style="color:var(--primary); font-size:13px;">${row.points}</strong></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Match Schedule & Fixtures -->
+    <div class="section-title-row">
+      <h2>🗓️ Match Schedule (${totalFixtures})</h2>
+      <button type="button" class="link-btn" onclick="openAddFixtureModal('${activeTourn.id}')">＋ Add Fixture</button>
+    </div>
+
+    <div>
+      ${(activeTourn.fixtures || []).map(fx => {
+        const nameA = teamsMap[fx.teamAId] || 'Team A';
+        const nameB = teamsMap[fx.teamBId] || 'Team B';
+        const linkedMatch = fx.matchId ? allMatches.find(m => m.id === fx.matchId) : null;
+        const effectiveStatus = linkedMatch ? linkedMatch.status : fx.status;
+        const statusCls = effectiveStatus === 'Completed' ? 'completed' : effectiveStatus === 'Live' ? 'live' : 'scheduled';
+
+        return `
+          <div class="tourn-fixture-card">
+            <div class="tourn-fixture-top">
+              <span>MATCH #${fx.matchNumber} · ${escapeHTML(fx.roundLabel || 'League')}</span>
+              <span class="tourn-status-badge ${statusCls}">${escapeHTML(effectiveStatus)}</span>
+            </div>
+            <div class="tourn-fixture-teams">
+              <span>${escapeHTML(nameA)}</span>
+              <span class="tourn-vs-pill">VS</span>
+              <span>${escapeHTML(nameB)}</span>
+            </div>
+            ${(linkedMatch?.result || fx.result) ? `
+              <div style="margin-top:6px; font-size:11.5px; font-weight:800; color:var(--primary);">
+                🏆 ${escapeHTML(linkedMatch?.result || fx.result)}
+              </div>
+            ` : ''}
+            <div style="margin-top:10px; display:flex; justify-content:flex-end; gap:8px;">
+              ${effectiveStatus === 'Completed' && linkedMatch ? `
+                <button type="button" class="btn btn-secondary" style="padding:6px 11px; font-size:11px;" onclick="viewMatchScorecardModal('${linkedMatch.id}')">📋 Scorecard</button>
+              ` : `
+                <button type="button" class="btn btn-primary" style="padding:6px 12px; font-size:11.5px;" onclick="launchTournamentFixture('${activeTourn.id}', '${fx.id}')">
+                  ${effectiveStatus === 'Live' ? '⚡ Resume Match' : '⚡ Score Match'}
+                </button>
+              `}
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+function selectActiveTournament(tournId) {
+  selectedTournamentId = tournId;
+  renderTournamentsView();
+}
+
+async function openCreateTournamentModal() {
+  const teams = await dbGetAll('teams');
+  const html = `
+    <form id="createTournamentForm">
+      <div class="form-group" style="margin-bottom:11px;">
+        <label>Tournament Name *</label>
+        <input type="text" id="tfName" required placeholder="e.g. Premier Cricket Cup 2026">
+      </div>
+
+      <div class="field-grid" style="margin-bottom:11px;">
+        <div class="form-group">
+          <label>Format</label>
+          <select id="tfFormat">
+            <option value="T20">T20 (20 Overs)</option>
+            <option value="T10">T10 (10 Overs)</option>
+            <option value="ODI">ODI (50 Overs)</option>
+            <option value="Custom">Custom Overs</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Overs Per Side</label>
+          <input type="number" id="tfOvers" min="1" max="50" value="20">
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-bottom:11px;">
+        <label>Schedule Structure</label>
+        <select id="tfStageType">
+          <option value="round_robin">Single Round-Robin League (Every team plays once)</option>
+          <option value="double_round_robin">Double Round-Robin League (Home &amp; Away)</option>
+          <option value="knockout">Knockout Bracket</option>
+        </select>
+      </div>
+
+      <div class="form-group" style="margin-bottom:10px;">
+        <label>Select Competing Teams (Minimum 2) *</label>
+        <div id="tfTeamSelectGrid" class="tourn-team-select-grid">
+          ${teams.map(t => `
+            <label class="tourn-team-check-item">
+              <input type="checkbox" name="tfTeamIds" value="${t.id}" checked>
+              <span>${escapeHTML(t.name)}</span>
+            </label>
+          `).join('')}
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-bottom:4px;">
+        <label>Quick-Add New Teams (Comma-separated, optional)</label>
+        <input type="text" id="tfNewTeamsInput" placeholder="e.g. Royal Strikers, Metro Kings">
+      </div>
+    </form>
+  `;
+
+  openModal('Create New Tournament', html, async () => {
+    const name = (document.getElementById('tfName')?.value || '').trim();
+    if (!name) {
+      showToast('Please enter a tournament name.');
+      return false;
+    }
+
+    const format = document.getElementById('tfFormat')?.value || 'T20';
+    const overs = Math.max(1, parseInt(document.getElementById('tfOvers')?.value || '20', 10));
+    const stageType = document.getElementById('tfStageType')?.value || 'round_robin';
+
+    const selectedIds = Array.from(document.querySelectorAll('input[name="tfTeamIds"]:checked')).map(cb => cb.value);
+
+    // Create any quick-added teams directly in IndexedDB `teams` store
+    const newTeamRaw = (document.getElementById('tfNewTeamsInput')?.value || '').trim();
+    if (newTeamRaw) {
+      const names = newTeamRaw.split(',').map(s => s.trim()).filter(Boolean);
+      for (const tName of names) {
+        const newId = generateId();
+        await dbPut('teams', { id: newId, name: tName, created: Date.now() });
+        selectedIds.push(newId);
+      }
+    }
+
+    const uniqueTeamIds = Array.from(new Set(selectedIds));
+    if (uniqueTeamIds.length < 2) {
+      alert('Please select or add at least 2 competing teams.');
+      return false;
+    }
+
+    const fixtures = stageType === 'knockout'
+      ? generateKnockoutFixtures(uniqueTeamIds)
+      : generateRoundRobinFixtures(uniqueTeamIds, stageType === 'double_round_robin');
+
+    const newTourn = {
+      id: generateId(),
+      name,
+      format,
+      overs,
+      stageType,
+      teamIds: uniqueTeamIds,
+      fixtures,
+      created: Date.now()
+    };
+
+    const existing = await getAllTournaments();
+    existing.unshift(newTourn);
+    await saveAllTournaments(existing);
+
+    selectedTournamentId = newTourn.id;
+    showToast(`Tournament "${name}" created with ${fixtures.length} scheduled matches!`);
+    renderTournamentsView();
+    renderDashboard();
+    return true;
+  });
+}
+
+async function openAddTeamToTournamentModal(tournId) {
+  const [tournaments, allTeams] = await Promise.all([getAllTournaments(), dbGetAll('teams')]);
+  const tourn = tournaments.find(t => t.id === tournId);
+  if (!tourn) return;
+
+  const availableTeams = allTeams.filter(t => !(tourn.teamIds || []).includes(t.id));
+
+  const html = `
+    <div>
+      ${availableTeams.length ? `
+        <div class="form-group" style="margin-bottom:12px;">
+          <label>Select Existing Team</label>
+          <select id="attExistingTeam">
+            <option value="">-- Choose Team --</option>
+            ${availableTeams.map(t => `<option value="${t.id}">${escapeHTML(t.name)}</option>`).join('')}
+          </select>
+        </div>
+      ` : ''}
+      <div class="form-group" style="margin-bottom:10px;">
+        <label>Or Create &amp; Add New Team</label>
+        <input type="text" id="attNewTeamName" placeholder="e.g. Thunderbolts XI">
+      </div>
+      <label class="checklist-item" style="cursor:pointer;">
+        <input type="checkbox" id="attAutoSchedule" checked style="width:16px; height:16px; accent-color:var(--primary);">
+        <span>Auto-generate fixtures against existing tournament teams</span>
+      </label>
+    </div>
+  `;
+
+  openModal(`Add Team to ${tourn.name}`, html, async () => {
+    let chosenId = document.getElementById('attExistingTeam')?.value || '';
+    const newName = (document.getElementById('attNewTeamName')?.value || '').trim();
+    const autoSched = !!document.getElementById('attAutoSchedule')?.checked;
+
+    if (newName) {
+      chosenId = generateId();
+      await dbPut('teams', { id: chosenId, name: newName, created: Date.now() });
+    }
+
+    if (!chosenId) {
+      showToast('Select an existing team or enter a new team name.');
+      return false;
+    }
+
+    if (!tourn.teamIds.includes(chosenId)) {
+      const prevTeams = [...tourn.teamIds];
+      tourn.teamIds.push(chosenId);
+      if (autoSched) {
+        let nextNum = (tourn.fixtures?.length || 0) + 1;
+        prevTeams.forEach(oppId => {
+          tourn.fixtures.push({
+            id: generateId(),
+            matchNumber: nextNum++,
+            roundLabel: tourn.stageType === 'knockout' ? 'Knockout Stage' : 'League Stage',
+            teamAId: oppId,
+            teamBId: chosenId,
+            status: 'Scheduled',
+            matchId: null,
+            result: '',
+            winnerTeamId: null
+          });
+        });
+      }
+      await saveAllTournaments(tournaments);
+      showToast('Team added to tournament!');
+      renderTournamentsView();
+      renderDashboard();
+    }
+    return true;
+  });
+}
+
+async function openAddFixtureModal(tournId) {
+  const [tournaments, allTeams] = await Promise.all([getAllTournaments(), dbGetAll('teams')]);
+  const tourn = tournaments.find(t => t.id === tournId);
+  if (!tourn) return;
+  const tTeams = allTeams.filter(t => (tourn.teamIds || []).includes(t.id));
+
+  const html = `
+    <div>
+      <div class="form-group" style="margin-bottom:10px;">
+        <label>Round / Stage Label</label>
+        <input type="text" id="afRoundLabel" value="Playoff / Final">
+      </div>
+      <div class="field-grid">
+        <div class="form-group">
+          <label>Team A</label>
+          <select id="afTeamA">
+            ${tTeams.map(t => `<option value="${t.id}">${escapeHTML(t.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Team B</label>
+          <select id="afTeamB">
+            ${tTeams.map((t, idx) => `<option value="${t.id}" ${idx === 1 ? 'selected' : ''}>${escapeHTML(t.name)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+    </div>
+  `;
+
+  openModal('Add Custom Fixture', html, async () => {
+    const teamAId = document.getElementById('afTeamA')?.value;
+    const teamBId = document.getElementById('afTeamB')?.value;
+    const roundLabel = (document.getElementById('afRoundLabel')?.value || 'League Stage').trim();
+    if (!teamAId || !teamBId || teamAId === teamBId) {
+      alert('Please choose two different teams.');
+      return false;
+    }
+    tourn.fixtures.push({
+      id: generateId(),
+      matchNumber: (tourn.fixtures?.length || 0) + 1,
+      roundLabel,
+      teamAId,
+      teamBId,
+      status: 'Scheduled',
+      matchId: null,
+      result: '',
+      winnerTeamId: null
+    });
+    await saveAllTournaments(tournaments);
+    showToast('Fixture added to schedule!');
+    renderTournamentsView();
+    return true;
+  });
+}
+
+async function launchTournamentFixture(tournId, fixtureId) {
+  const [tournaments, allTeams, allPlayers, allMatches] = await Promise.all([
+    getAllTournaments(),
+    dbGetAll('teams'),
+    dbGetAll('players'),
+    dbGetAll('matches')
+  ]);
+  const tourn = tournaments.find(t => t.id === tournId);
+  if (!tourn) return;
+  const fx = (tourn.fixtures || []).find(f => f.id === fixtureId);
+  if (!fx) return;
+
+  // Resume if match already exists
+  if (fx.matchId) {
+    const existingMatch = allMatches.find(m => m.id === fx.matchId);
+    if (existingMatch) {
+      activeMatch = existingMatch;
+      navigate('live-scorer');
+      return;
+    }
+  }
+
+  const teamA = allTeams.find(t => t.id === fx.teamAId);
+  const teamB = allTeams.find(t => t.id === fx.teamBId);
+  const squadA = allPlayers.filter(p => p.teamId === fx.teamAId);
+  const squadB = allPlayers.filter(p => p.teamId === fx.teamBId);
+
+  const html = `
+    <div>
+      <div class="extra-modal-banner" style="margin-bottom:12px;">
+        <span>🏆 ${escapeHTML(tourn.name)} · Match #${fx.matchNumber}</span>
+        <span class="extra-total-pill">${tourn.overs || 20} Overs</span>
+      </div>
+      <div class="field-grid" style="margin-bottom:10px;">
+        <div class="form-group">
+          <label>Toss Won By</label>
+          <select id="ltfTossWinner">
+            <option value="${fx.teamAId}">${escapeHTML(teamA?.name || 'Team A')}</option>
+            <option value="${fx.teamBId}">${escapeHTML(teamB?.name || 'Team B')}</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Decision</label>
+          <select id="ltfTossDecision">
+            <option value="bat">Bat First</option>
+            <option value="bowl">Bowl First</option>
+          </select>
+        </div>
+      </div>
+      <p class="muted" style="font-size:11.5px;">Tip: You can assign or type batters &amp; bowlers directly on the Scorer screen if squads aren't pre-filled.</p>
+    </div>
+  `;
+
+  openModal(`Start ${teamA?.name || 'Team A'} vs ${teamB?.name || 'Team B'}`, html, async () => {
+    const tossWinner = document.getElementById('ltfTossWinner')?.value || fx.teamAId;
+    const tossDecision = document.getElementById('ltfTossDecision')?.value || 'bat';
+    const battingTeamId = (tossWinner === fx.teamAId && tossDecision === 'bat') || (tossWinner === fx.teamBId && tossDecision === 'bowl')
+      ? fx.teamAId
+      : fx.teamBId;
+    const bowlingTeamId = battingTeamId === fx.teamAId ? fx.teamBId : fx.teamAId;
+
+    const batSquad = battingTeamId === fx.teamAId ? squadA : squadB;
+    const bowlSquad = battingTeamId === fx.teamAId ? squadB : squadA;
+
+    const newMatch = {
+      id: generateId(),
+      title: `${tourn.name} - Match #${fx.matchNumber} (${fx.roundLabel || 'League'})`,
+      tournament: tourn.name,
+      tournamentId: tourn.id,
+      tournamentFixtureId: fx.id,
+      format: tourn.format || 'T20',
+      overs: tourn.overs || 20,
+      a: fx.teamAId,
+      b: fx.teamBId,
+      tossWinner,
+      tossDecision,
+      status: 'Live',
+      target: null,
+      innings: [
+        {
+          inningsNum: 1,
+          batting: battingTeamId,
+          bowling: bowlingTeamId,
+          squad: batSquad,
+          bowlingSquad: bowlSquad,
+          strikerId: batSquad[0]?.id || null,
+          nonStrikerId: batSquad[1]?.id || null,
+          bowlerId: bowlSquad[0]?.id || null,
+          balls: [],
+          base: { runs: 0, wickets: 0, legal: 0, ballCount: 0 }
+        }
+      ],
+      created: Date.now(),
+      updated: Date.now()
+    };
+
+    await dbPut('matches', newMatch);
+    fx.status = 'Live';
+    fx.matchId = newMatch.id;
+    await saveAllTournaments(tournaments);
+
+    activeMatch = newMatch;
+    showToast('Tournament fixture started!');
+    navigate('live-scorer');
+    return true;
+  });
+}
+
+async function deleteTournamentPrompt(tournId) {
+  if (!confirm('Delete this tournament schedule and points table? Existing completed match scorecards in Match History will remain safe.')) return;
+  const tournaments = await getAllTournaments();
+  const filtered = tournaments.filter(t => t.id !== tournId);
+  await saveAllTournaments(filtered);
+  selectedTournamentId = filtered[0]?.id || null;
+  showToast('Tournament removed');
+  renderTournamentsView();
+  renderDashboard();
 }

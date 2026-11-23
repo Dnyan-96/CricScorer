@@ -173,6 +173,18 @@
         </button>
       </div>
 
+      <!-- Home Screen Tournament Mode Launcher Card -->
+      <div class="home-tournament-banner" onclick="navigate('tournaments')">
+        <div class="htb-left">
+          <div class="htb-badge">🏆 TOURNAMENT MODE</div>
+          <h3>Leagues &amp; Knockouts</h3>
+          <p id="homeTournamentSummaryText">Add teams, auto-generate schedules &amp; track live Points Table / NRR</p>
+        </div>
+        <div class="htb-right">
+          <span class="htb-cta">Open →</span>
+        </div>
+      </div>
+
       <!-- 4-Column Summary Metrics Card -->
       <div class="home-metrics-card">
         <div class="hm-cell">
@@ -211,6 +223,21 @@
       </div>
       <div id="dashboardTopPerformersStrip" class="home-performers-strip">
         <span class="muted" style="font-size:12px;">No player records yet.</span>
+      </div>
+    </section>
+
+    <!-- VIEW 1B: TOURNAMENTS & LEAGUES HUB -->
+    <section id="tournaments" class="page">
+      <div class="page-header">
+        <div>
+          <p class="eyebrow">COMPETITIONS &amp; SCHEDULES</p>
+          <h1>Tournaments</h1>
+        </div>
+        <button class="btn btn-primary" onclick="openCreateTournamentModal()">＋ New Tournament</button>
+      </div>
+
+      <div id="tournamentsContainer">
+        <!-- Rendered dynamically by app.js -->
       </div>
     </section>
 
@@ -664,6 +691,10 @@
     <button class="nav-item" data-nav="live-scorer" onclick="navigate('live-scorer')">
       <span class="nav-icon">⚡</span>
       <span class="nav-text">Scorer</span>
+    </button>
+    <button class="nav-item" data-nav="tournaments" onclick="navigate('tournaments')">
+      <span class="nav-icon">🏆</span>
+      <span class="nav-text">Leagues</span>
     </button>
     <button class="nav-item" data-nav="create-match" onclick="navigate('create-match')">
       <span class="nav-icon">＋</span>
