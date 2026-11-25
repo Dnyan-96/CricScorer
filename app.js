@@ -441,7 +441,7 @@ class CricketEngine {
 // 3. NAVIGATION & VIEW CONTROLLER (9 SECTIONS)
 // ==========================================
 
-const VALID_TABS = ['dashboard', 'tournaments', 'live-scorer', 'create-match', 'teams', 'players', 'history', 'statistics', 'settings', 'scorecard'];
+const VALID_TABS = ['dashboard', 'tournaments', 'live-scorer', 'create-match', 'teams', 'players', 'history', 'statistics', 'settings', 'scorecard', 'watch-live'];
 
 function persistActiveTab(tabId) {
   if (!VALID_TABS.includes(tabId)) return;
@@ -455,8 +455,12 @@ function persistActiveTab(tabId) {
 
 function getSavedActiveTab() {
   try {
-    const hashTab = (window.location.hash || '').replace('#', '').trim();
-    if (VALID_TABS.includes(hashTab)) return hashTab;
+    const rawHash = (window.location.hash || '').replace('#', '').trim();
+    if (rawHash.startsWith('watch=')) {
+      spectatorWatchMatchId = decodeURIComponent(rawHash.slice(6));
+      return 'watch-live';
+    }
+    if (VALID_TABS.includes(rawHash)) return rawHash;
     const storedTab = sessionStorage.getItem('cricscorer_active_tab');
     if (VALID_TABS.includes(storedTab)) return storedTab;
   } catch (e) {}
@@ -474,8 +478,9 @@ function navigate(tabId, options = {}) {
     window.scrollTo({ top: 0, behavior: options.instant ? 'auto' : 'smooth' });
   }
 
-  if (targetTab === 'dashboard') renderDashboard();
+  if (targetTab === 'dashboard') { renderDashboard(); refreshPublicLiveCenter(); }
   if (targetTab === 'tournaments') renderTournamentsView();
+  if (targetTab === 'watch-live') renderSpectatorView();
   if (targetTab === 'live-scorer') renderLiveScorerView();
   if (targetTab === 'create-match') renderCreateMatchView();
   if (targetTab === 'teams') renderTeams();
@@ -1690,7 +1695,10 @@ async function renderLiveScorerView() {
     <div class="scorer-broadcast-hero">
       <div class="hlh-top-row">
         <span class="broadcast-match-meta" style="font-size:11px; font-weight:800; letter-spacing:0.7px; text-transform:uppercase; color:var(--text-muted);">${escapeHTML(activeMatch.format || 'T20')} MATCH · ${activeMatch.isSuperOver ? 'Super Over' : (activeMatch.innings.length === 1 ? '1st Innings' : '2nd Innings')}</span>
-        <span class="scorer-live-pill"><span class="scorer-live-dot"></span> ${escapeHTML(activeMatch.status.toUpperCase())}</span>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <button type="button" class="pill-btn" style="padding:3px 9px; font-size:10px; font-weight:900;" onclick="shareLiveMatchLink('${activeMatch.id}')" title="Share Public Live Score Link">📤 Share Live</button>
+          <span class="scorer-live-pill"><span class="scorer-live-dot"></span> ${escapeHTML(activeMatch.status.toUpperCase())}</span>
+        </div>
       </div>
 
       <div class="hlh-teams-score-row">
@@ -2975,8 +2983,10 @@ Would you like to start a 1-Over Super Over tie-breaker?`)) {
 
 async function saveActiveMatch() {
   if (activeMatch) {
+    activeMatch.updated = Date.now();
     await dbPut('matches', activeMatch);
     triggerAutoBackup();
+    queueCloudMatchSync(activeMatch);
   }
 }
 
@@ -4217,6 +4227,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   syncFxToggleBtn();
   initTopNavTelemetry();
+  initSupabaseCloud();
 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
@@ -4429,6 +4440,7 @@ async function saveAllTournaments(list) {
   if (!db) return;
   await dbPut('settings', { key: TOURNAMENTS_STORAGE_KEY, val: list });
   triggerAutoBackup();
+  queueCloudTournamentsSync(list);
 }
 
 function generateRoundRobinFixtures(teamIds, doubleRound = false) {
@@ -5096,4 +5108,663 @@ async function deleteTournamentPrompt(tournId) {
   showToast('Tournament removed');
   renderTournamentsView();
   renderDashboard();
+}
+
+
+// ==========================================
+// SUPABASE CLOUD AUTH, PROFILE SETUP & PUBLIC LIVE SYNC
+// ==========================================
+const SUPABASE_URL = 'https://fdsvwotdhmvudkwuuceb.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_QbRKDXz3ymBWCyRlUBEljA_ihM-GYbL';
+
+let sbClient = null;
+let currentCloudUser = null;
+let currentCloudProfile = null;
+let cloudSyncDebounceTimer = null;
+let spectatorWatchMatchId = null;
+let spectatorMatchData = null;
+let spectatorRealtimeChannel = null;
+let publicFeedMatchesCache = [];
+
+function initSupabaseCloud() {
+  try {
+    if (!window.supabase || !window.supabase.createClient) {
+      console.warn('[Cloud] Supabase SDK unavailable (offline mode active).');
+      updateCloudAuthUI();
+      return;
+    }
+    sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+    sbClient.auth.getSession().then(async ({ data }) => {
+      currentCloudUser = data?.session?.user || null;
+      if (currentCloudUser) {
+        await loadOrPromptCloudProfile();
+        syncAllLocalDataToCloud(true);
+      }
+      updateCloudAuthUI();
+      refreshPublicLiveCenter();
+    });
+
+    sbClient.auth.onAuthStateChange(async (event, session) => {
+      currentCloudUser = session?.user || null;
+      if (currentCloudUser) {
+        await loadOrPromptCloudProfile();
+        if (event === 'SIGNED_IN') {
+          await syncAllLocalDataToCloud(false);
+        }
+      } else {
+        currentCloudProfile = null;
+      }
+      updateCloudAuthUI();
+      refreshPublicLiveCenter();
+    });
+
+    window.addEventListener('online', () => {
+      if (currentCloudUser) {
+        syncAllLocalDataToCloud(true);
+      }
+      refreshPublicLiveCenter();
+    });
+  } catch (err) {
+    console.warn('[Cloud] Init error:', err);
+  }
+}
+
+async function loadOrPromptCloudProfile() {
+  if (!sbClient || !currentCloudUser) return;
+  try {
+    const { data, error } = await sbClient
+      .from('profiles')
+      .select('*')
+      .eq('id', currentCloudUser.id)
+      .maybeSingle();
+
+    if (data) {
+      currentCloudProfile = data;
+      updateCloudAuthUI();
+    } else if (!error) {
+      // First-time user setup modal
+      openProfileSetupModal(true);
+    }
+  } catch (e) {
+    console.warn('[Cloud] Profile fetch skipped:', e);
+  }
+}
+
+function updateCloudAuthUI() {
+  const pill = document.getElementById('cloudAuthHeaderBtn');
+  if (pill) {
+    if (currentCloudUser) {
+      const name = currentCloudProfile?.display_name || currentCloudUser.user_metadata?.full_name || currentCloudUser.email?.split('@')[0] || 'Synced';
+      pill.textContent = `☁️ ${name}`;
+      pill.classList.add('signed-in');
+    } else {
+      pill.textContent = '☁️ Sign In';
+      pill.classList.remove('signed-in');
+    }
+  }
+
+  const card = document.getElementById('settingsCloudAccountCard');
+  if (card) {
+    if (currentCloudUser) {
+      const dispName = currentCloudProfile?.display_name || currentCloudUser.email || 'Authenticated User';
+      const role = currentCloudProfile?.role || 'Scorer';
+      const city = currentCloudProfile?.city || 'Not set';
+      card.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:10px;">
+          <div>
+            <div style="font-size:14px; font-weight:900; color:var(--primary);">✅ ${escapeHTML(dispName)}</div>
+            <div class="muted" style="font-size:11.5px;">${escapeHTML(currentCloudUser.email || '')}</div>
+            <div style="margin-top:4px; font-size:11.5px;">Role: <strong>${escapeHTML(role)}</strong> · City/Club: <strong>${escapeHTML(city)}</strong></div>
+          </div>
+          <button type="button" class="btn btn-secondary" style="padding:6px 10px; font-size:11px;" onclick="openProfileSetupModal(false)">Edit Profile</button>
+        </div>
+        <div style="display:flex; flex-wrap:wrap; gap:8px;">
+          <button type="button" class="btn btn-primary" style="flex:1; font-size:12px;" onclick="syncAllLocalDataToCloud(false)">🔄 Sync Now</button>
+          <button type="button" class="btn btn-secondary" style="font-size:12px; color:var(--danger);" onclick="signOutCloudUser()">Sign Out</button>
+        </div>
+      `;
+    } else {
+      card.innerHTML = `
+        <div style="margin-bottom:10px;">
+          <strong style="font-size:13.5px;">Back Up &amp; Broadcast Your Matches</strong>
+          <p class="muted" style="font-size:12px; margin-top:3px;">Guest mode works 100% offline. Sign in to sync teams, tournaments &amp; live scoreboards to the Public Live Match Center so anyone can watch.</p>
+        </div>
+        <button type="button" class="btn btn-primary" style="width:100%;" onclick="openCloudAuthModal()">☁️ Sign In / Create Profile</button>
+      `;
+    }
+  }
+}
+
+function handleCloudAuthHeaderClick() {
+  if (currentCloudUser) {
+    navigate('settings');
+  } else {
+    openCloudAuthModal();
+  }
+}
+
+let currentAuthTabMode = 'signin';
+
+function openCloudAuthModal() {
+  currentAuthTabMode = 'signin';
+  const html = `
+    <div>
+      <button type="button" class="google-oauth-btn" onclick="signInWithGoogleCloud()">
+        <span style="font-size:16px;">G</span>
+        <span>Continue with Google (1-Tap)</span>
+      </button>
+
+      <div style="text-align:center; font-size:11px; color:var(--text-muted); margin-bottom:10px;">— OR USE EMAIL &amp; PASSWORD —</div>
+
+      <div class="auth-mode-tabs">
+        <button type="button" class="auth-tab-btn active" id="authTabSignIn" onclick="switchCloudAuthTab('signin')">Sign In</button>
+        <button type="button" class="auth-tab-btn" id="authTabSignUp" onclick="switchCloudAuthTab('signup')">Create Account</button>
+      </div>
+
+      <div class="form-group" style="margin-bottom:10px;">
+        <label>Email Address *</label>
+        <input type="email" id="cloudAuthEmail" placeholder="scorer@example.com" required>
+      </div>
+
+      <div class="form-group" style="margin-bottom:10px;">
+        <label>Password * <small class="muted">(Min 6 characters)</small></label>
+        <input type="password" id="cloudAuthPassword" placeholder="••••••••" required>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end;">
+        <button type="button" class="link-btn" style="font-size:11.5px;" onclick="sendMagicLinkCloud()">✨ Send Passwordless Magic Link instead</button>
+      </div>
+    </div>
+  `;
+
+  openModal('Sign In to CricScorer Cloud', html, async () => {
+    if (!sbClient) {
+      showToast('Cloud service offline. Check internet connection.');
+      return false;
+    }
+    const email = (document.getElementById('cloudAuthEmail')?.value || '').trim();
+    const password = document.getElementById('cloudAuthPassword')?.value || '';
+    if (!email || password.length < 6) {
+      alert('Please enter a valid email and a password of at least 6 characters.');
+      return false;
+    }
+
+    if (currentAuthTabMode === 'signup') {
+      const { data, error } = await sbClient.auth.signUp({ email, password });
+      if (error) {
+        alert(error.message);
+        return false;
+      }
+      if (data?.session) {
+        showToast('Account created & signed in!');
+        return true;
+      } else {
+        alert('Check your email inbox to confirm your account, then sign in!');
+        return true;
+      }
+    } else {
+      const { error } = await sbClient.auth.signInWithPassword({ email, password });
+      if (error) {
+        alert(error.message);
+        return false;
+      }
+      showToast('Signed in to CricScorer Cloud!');
+      return true;
+    }
+  });
+}
+
+function switchCloudAuthTab(mode) {
+  currentAuthTabMode = mode;
+  document.getElementById('authTabSignIn')?.classList.toggle('active', mode === 'signin');
+  document.getElementById('authTabSignUp')?.classList.toggle('active', mode === 'signup');
+}
+
+async function signInWithGoogleCloud() {
+  if (!sbClient) return;
+  const redirectTo = window.location.origin + window.location.pathname;
+  const { error } = await sbClient.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo }
+  });
+  if (error) alert('Google Sign-In error: ' + error.message);
+}
+
+async function sendMagicLinkCloud() {
+  if (!sbClient) return;
+  const email = (document.getElementById('cloudAuthEmail')?.value || '').trim();
+  if (!email) {
+    alert('Enter your email address first to receive a Magic Link.');
+    return;
+  }
+  const redirectTo = window.location.origin + window.location.pathname;
+  const { error } = await sbClient.auth.signInWithOtp({
+    email,
+    options: { emailRedirectTo: redirectTo }
+  });
+  if (error) {
+    alert(error.message);
+  } else {
+    alert(`Magic Login Link sent to ${email}! Open the link in your email to log in.`);
+    closeModal();
+  }
+}
+
+function openProfileSetupModal(isFirstTime = false) {
+  if (!currentCloudUser) return;
+  const defaultName = currentCloudProfile?.display_name || currentCloudUser.user_metadata?.full_name || currentCloudUser.email?.split('@')[0] || '';
+  const defaultRole = currentCloudProfile?.role || 'Scorer';
+  const defaultCity = currentCloudProfile?.city || '';
+
+  const html = `
+    <div>
+      <p class="muted" style="font-size:12px; margin-bottom:12px;">
+        ${isFirstTime ? 'Welcome! Set up your public scorer/player profile so teams and spectators recognize your matches.' : 'Update your public CricScorer profile details.'}
+      </p>
+      <div class="form-group" style="margin-bottom:10px;">
+        <label>Display Name *</label>
+        <input type="text" id="profDisplayName" value="${escapeHTML(defaultName)}" placeholder="e.g. Rohit Sharma" required>
+      </div>
+      <div class="form-group" style="margin-bottom:10px;">
+        <label>Primary Role</label>
+        <select id="profRole">
+          <option value="Scorer" ${defaultRole === 'Scorer' ? 'selected' : ''}>Scorer / Organizer</option>
+          <option value="All-Rounder" ${defaultRole === 'All-Rounder' ? 'selected' : ''}>All-Rounder</option>
+          <option value="Batter" ${defaultRole === 'Batter' ? 'selected' : ''}>Batter</option>
+          <option value="Bowler" ${defaultRole === 'Bowler' ? 'selected' : ''}>Bowler</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Home City / Cricket Club</label>
+        <input type="text" id="profCity" value="${escapeHTML(defaultCity)}" placeholder="e.g. Pune / Striker CC">
+      </div>
+    </div>
+  `;
+
+  openModal(isFirstTime ? 'Complete Your Profile Setup' : 'Edit Public Profile', html, async () => {
+    const displayName = (document.getElementById('profDisplayName')?.value || '').trim();
+    if (!displayName) {
+      showToast('Please enter a display name.');
+      return false;
+    }
+    const role = document.getElementById('profRole')?.value || 'Scorer';
+    const city = (document.getElementById('profCity')?.value || '').trim();
+
+    const payload = {
+      id: currentCloudUser.id,
+      display_name: displayName,
+      role,
+      city,
+      updated_at: new Date().toISOString()
+    };
+
+    const { error } = await sbClient.from('profiles').upsert(payload);
+    if (error) {
+      alert('Could not save profile: ' + error.message);
+      return false;
+    }
+    currentCloudProfile = payload;
+    updateCloudAuthUI();
+    showToast('Profile saved to cloud!');
+    return true;
+  });
+}
+
+async function signOutCloudUser() {
+  if (!sbClient) return;
+  await sbClient.auth.signOut();
+  currentCloudUser = null;
+  currentCloudProfile = null;
+  updateCloudAuthUI();
+  showToast('Signed out (Local offline data preserved)');
+}
+
+// ==========================================
+// OFFLINE-FIRST BACKGROUND SYNC TO SUPABASE
+// ==========================================
+function queueCloudMatchSync(matchObj) {
+  if (!sbClient || !currentCloudUser || !navigator.onLine || !matchObj) return;
+  clearTimeout(cloudSyncDebounceTimer);
+  cloudSyncDebounceTimer = setTimeout(() => {
+    pushSingleMatchToCloud(matchObj);
+  }, 1200);
+}
+
+async function pushSingleMatchToCloud(matchObj) {
+  if (!sbClient || !currentCloudUser || !navigator.onLine || !matchObj) return;
+  try {
+    const teams = await dbGetAll('teams');
+    const teamAName = teams.find(t => t.id === matchObj.a)?.name || 'Team A';
+    const teamBName = teams.find(t => t.id === matchObj.b)?.name || 'Team B';
+    const enrichedMatch = {
+      ...matchObj,
+      teamAName,
+      teamBName,
+      ownerName: currentCloudProfile?.display_name || currentCloudUser.email?.split('@')[0] || 'Scorer'
+    };
+
+    await sbClient.from('matches').upsert({
+      id: matchObj.id,
+      owner_id: currentCloudUser.id,
+      tournament_id: matchObj.tournamentId || null,
+      title: matchObj.title || `${teamAName} vs ${teamBName}`,
+      status: matchObj.status || 'Live',
+      result: matchObj.result || '',
+      match_json: enrichedMatch,
+      updated_at: new Date().toISOString()
+    });
+  } catch (e) {
+    console.warn('[Cloud] Match background sync deferred:', e);
+  }
+}
+
+async function queueCloudTournamentsSync(tournsList) {
+  if (!sbClient || !currentCloudUser || !navigator.onLine || !Array.isArray(tournsList)) return;
+  try {
+    const teams = await dbGetAll('teams');
+    const teamsMap = {};
+    teams.forEach(t => { teamsMap[t.id] = t.name; });
+
+    for (const t of tournsList) {
+      await sbClient.from('tournaments').upsert({
+        id: t.id,
+        owner_id: currentCloudUser.id,
+        name: t.name,
+        format: t.format || 'T20',
+        overs: t.overs || 20,
+        stage_type: t.stageType || 'round_robin',
+        data_json: { ...t, teamsMap },
+        updated_at: new Date().toISOString()
+      });
+    }
+  } catch (e) {
+    console.warn('[Cloud] Tournament sync deferred:', e);
+  }
+}
+
+async function syncAllLocalDataToCloud(silent = false) {
+  if (!sbClient || !currentCloudUser || !navigator.onLine || !db) return;
+  try {
+    const [teams, players, matches, tourns] = await Promise.all([
+      dbGetAll('teams'),
+      dbGetAll('players'),
+      dbGetAll('matches'),
+      getAllTournaments()
+    ]);
+
+    for (const tm of teams) {
+      const roster = players.filter(p => p.teamId === tm.id);
+      await sbClient.from('teams').upsert({
+        id: tm.id,
+        owner_id: currentCloudUser.id,
+        name: tm.name,
+        city: currentCloudProfile?.city || '',
+        roster_json: roster,
+        updated_at: new Date().toISOString()
+      });
+    }
+
+    for (const m of matches) {
+      await pushSingleMatchToCloud(m);
+    }
+
+    await queueCloudTournamentsSync(tourns);
+    if (!silent) showToast('All local teams, matches & tournaments synced to cloud!');
+    refreshPublicLiveCenter();
+  } catch (e) {
+    if (!silent) showToast('Sync will retry when connection stabilizes.');
+  }
+}
+
+// ==========================================
+// PUBLIC LIVE MATCH CENTER & REAL-TIME SPECTATOR VIEW
+// ==========================================
+async function refreshPublicLiveCenter(manual = false) {
+  const container = document.getElementById('publicLiveCenterList');
+  if (!container) return;
+
+  if (!sbClient || !navigator.onLine) {
+    container.innerHTML = `<div class="empty-state" style="padding:12px;">Connect to the internet to browse public live matches from all scorers.</div>`;
+    return;
+  }
+
+  try {
+    const { data: matches, error } = await sbClient
+      .from('matches')
+      .select('id, title, status, result, match_json, updated_at')
+      .order('updated_at', { ascending: false })
+      .limit(12);
+
+    if (error) throw error;
+    publicFeedMatchesCache = matches || [];
+
+    if (!publicFeedMatchesCache.length) {
+      container.innerHTML = `<div class="empty-state" style="padding:14px;">No public cloud matches yet. Sign in and score a match to broadcast live!</div>`;
+      return;
+    }
+
+    container.innerHTML = publicFeedMatchesCache.map(row => {
+      const m = row.match_json || {};
+      const innList = m.innings || [];
+      const curInn = innList[innList.length - 1];
+      let scoreSummary = 'Match Scheduled';
+      let batName = m.teamAName || 'Team A';
+      let bowlName = m.teamBName || 'Team B';
+
+      if (curInn) {
+        const st = CricketEngine.calculateInnings(curInn, curInn.squad || [], curInn.bowlingSquad || []);
+        batName = curInn.batting === m.a ? (m.teamAName || 'Team A') : (m.teamBName || 'Team B');
+        bowlName = curInn.bowling === m.a ? (m.teamAName || 'Team A') : (m.teamBName || 'Team B');
+        scoreSummary = `${st.totalRuns}/${st.wickets} (${st.oversFormatted} ov)`;
+      }
+
+      const isLive = row.status === 'Live';
+      return `
+        <div class="public-match-card ${isLive ? 'is-live' : ''}">
+          <div class="pmc-top">
+            <span>${escapeHTML(m.format || 'T20')} · By ${escapeHTML(m.ownerName || 'Scorer')}</span>
+            ${isLive
+              ? `<span class="pmc-live-badge"><span class="pmc-live-dot"></span> LIVE</span>`
+              : `<span class="tourn-status-badge completed">COMPLETED</span>`}
+          </div>
+          <div style="font-size:13.5px; font-weight:900;">${escapeHTML(batName)} vs ${escapeHTML(bowlName)}</div>
+          <div class="pmc-score-row">
+            <div>
+              <div class="pmc-score-big">${scoreSummary}</div>
+              <div class="muted" style="font-size:11px;">${escapeHTML(row.result || m.title || '')}</div>
+            </div>
+            <button type="button" class="btn btn-primary" style="padding:7px 12px; font-size:11.5px;" onclick="openSpectatorLiveMatch('${row.id}')">
+              📺 Watch Live
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    if (manual) showToast('Public Live Match Center updated');
+  } catch (e) {
+    container.innerHTML = `<div class="empty-state" style="padding:12px;">Unable to reach Public Live Center right now.</div>`;
+  }
+}
+
+function shareLiveMatchLink(matchId) {
+  if (activeMatch && currentCloudUser) {
+    pushSingleMatchToCloud(activeMatch);
+  }
+  const shareUrl = `${window.location.origin}${window.location.pathname}#watch=${encodeURIComponent(matchId)}`;
+  const shareText = activeMatch
+    ? `🏏 Watch LIVE Cricket Score: ${activeMatch.title || 'CricScorer Match'}
+${shareUrl}`
+    : `🏏 Watch LIVE Cricket Score on CricScorer:
+${shareUrl}`;
+
+  if (navigator.share) {
+    navigator.share({
+      title: 'CricScorer Live Scoreboard',
+      text: shareText,
+      url: shareUrl
+    }).catch(() => {});
+  } else if (navigator.clipboard) {
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      alert(`Live Spectator Link copied!
+
+${shareUrl}
+
+Share this link on WhatsApp so players & fans can watch ball-by-ball updates live.`);
+    }).catch(() => {
+      prompt('Copy and share this Live Spectator Link:', shareUrl);
+    });
+  } else {
+    prompt('Copy and share this Live Spectator Link:', shareUrl);
+  }
+}
+
+async function openSpectatorLiveMatch(matchId) {
+  spectatorWatchMatchId = matchId;
+  try {
+    history.replaceState(null, '', '#watch=' + encodeURIComponent(matchId));
+  } catch (e) {}
+  navigate('watch-live');
+}
+
+function exitSpectatorMode() {
+  if (spectatorRealtimeChannel && sbClient) {
+    sbClient.removeChannel(spectatorRealtimeChannel);
+    spectatorRealtimeChannel = null;
+  }
+  spectatorWatchMatchId = null;
+  navigate('dashboard');
+}
+
+async function renderSpectatorView() {
+  const container = document.getElementById('spectatorLiveContainer');
+  if (!container) return;
+
+  if (!spectatorWatchMatchId) {
+    container.innerHTML = `<div class="empty-state">No live broadcast selected. Pick a match from the Public Live Match Center on Home.</div>`;
+    return;
+  }
+
+  if (!sbClient) {
+    container.innerHTML = `<div class="empty-state">Connecting to broadcast server...</div>`;
+    return;
+  }
+
+  const { data, error } = await sbClient
+    .from('matches')
+    .select('*')
+    .eq('id', spectatorWatchMatchId)
+    .maybeSingle();
+
+  if (error || !data) {
+    container.innerHTML = `<div class="empty-state">Match not found or not yet synced to cloud by the scorer.</div>`;
+    return;
+  }
+
+  spectatorMatchData = data;
+  paintSpectatorScoreboard(data);
+
+  // Subscribe to real-time updates for this match
+  if (spectatorRealtimeChannel) {
+    sbClient.removeChannel(spectatorRealtimeChannel);
+  }
+  spectatorRealtimeChannel = sbClient
+    .channel('watch-match-' + spectatorWatchMatchId)
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'matches',
+      filter: `id=eq.${spectatorWatchMatchId}`
+    }, (payload) => {
+      if (payload.new) {
+        spectatorMatchData = payload.new;
+        paintSpectatorScoreboard(payload.new);
+      }
+    })
+    .subscribe();
+}
+
+function paintSpectatorScoreboard(row) {
+  const container = document.getElementById('spectatorLiveContainer');
+  if (!container || !row) return;
+  const m = row.match_json || {};
+  const innList = m.innings || [];
+  const inn = innList[innList.length - 1];
+  if (!inn) {
+    container.innerHTML = `<div class="empty-state">Waiting for first ball to be bowled...</div>`;
+    return;
+  }
+
+  const stats = CricketEngine.calculateInnings(inn, inn.squad || [], inn.bowlingSquad || []);
+  const batName = inn.batting === m.a ? (m.teamAName || 'Batting Team') : (m.teamBName || 'Bowling Team');
+  const bowlName = inn.bowling === m.a ? (m.teamAName || 'Batting Team') : (m.teamBName || 'Bowling Team');
+  const crr = stats.legalDeliveries > 0 ? ((stats.totalRuns / stats.legalDeliveries) * 6).toFixed(2) : '0.00';
+  const striker = stats.batters.find(b => b.id === inn.strikerId);
+  const nonStriker = stats.batters.find(b => b.id === inn.nonStrikerId);
+  const bowler = stats.bowlers.find(b => b.id === inn.bowlerId);
+  const recentBalls = (inn.balls || []).slice(-10);
+
+  container.innerHTML = `
+    <div class="spectator-banner">
+      <span>🔴 READ-ONLY LIVE BROADCAST · Auto-updating</span>
+      <button type="button" class="pill-btn" style="padding:3px 9px; font-size:10.5px;" onclick="shareLiveMatchLink('${row.id}')">📤 Share</button>
+    </div>
+
+    <div class="scorer-broadcast-hero">
+      <div class="hlh-top-row">
+        <span style="font-size:11px; font-weight:800; color:var(--text-muted);">${escapeHTML(m.format || 'T20')} · ${escapeHTML(m.title || 'Live Match')}</span>
+        <span class="scorer-live-pill"><span class="scorer-live-dot"></span> ${escapeHTML((row.status || 'LIVE').toUpperCase())}</span>
+      </div>
+      <div class="hlh-teams-score-row">
+        <div class="hlh-team-col">
+          ${buildHomeTeamShieldSVG(batName, 'a')}
+          <span class="hlh-team-label">${escapeHTML(batName)}</span>
+        </div>
+        <div class="hlh-score-center">
+          <div class="hlh-big-score">${stats.totalRuns} / ${stats.wickets}</div>
+          <div class="hlh-overs-label">(${stats.oversFormatted} / ${m.overs || 20} ov)</div>
+        </div>
+        <div class="hlh-team-col">
+          ${buildHomeTeamShieldSVG(bowlName, 'b')}
+          <span class="hlh-team-label">${escapeHTML(bowlName)}</span>
+        </div>
+      </div>
+      <div class="hlh-metrics-strip" style="grid-template-columns: repeat(3, 1fr);">
+        <div class="hlh-m-cell"><span>CRR</span><strong>${crr}</strong></div>
+        <div class="hlh-m-cell"><span>Target</span><strong>${m.target || '--'}</strong></div>
+        <div class="hlh-m-cell"><span>Extras</span><strong>${stats.extras.total || 0}</strong></div>
+      </div>
+      ${row.result ? `<div class="scorer-phase-strip" style="justify-content:center; font-weight:900; color:var(--primary);">🏆 ${escapeHTML(row.result)}</div>` : ''}
+    </div>
+
+    <div class="card" style="padding:10px; margin-bottom:12px;">
+      <table class="crease-table">
+        <thead><tr><th>Batter</th><th>R</th><th>B</th><th>4s</th><th>6s</th><th>SR</th></tr></thead>
+        <tbody>
+          ${striker ? `<tr><td>★ <strong>${escapeHTML(striker.name)}</strong>${renderBatterMilestoneBadges(striker.runs)}</td><td><strong>${striker.runs}</strong></td><td>${striker.balls}</td><td>${striker.fours}</td><td>${striker.sixes}</td><td>${striker.strikeRate}</td></tr>` : ''}
+          ${nonStriker ? `<tr><td>&nbsp;&nbsp;${escapeHTML(nonStriker.name)}${renderBatterMilestoneBadges(nonStriker.runs)}</td><td><strong>${nonStriker.runs}</strong></td><td>${nonStriker.balls}</td><td>${nonStriker.fours}</td><td>${nonStriker.sixes}</td><td>${nonStriker.strikeRate}</td></tr>` : ''}
+        </tbody>
+      </table>
+      ${bowler ? `
+        <table class="crease-table" style="margin-top:10px;">
+          <thead><tr><th>Bowler</th><th>O</th><th>R</th><th>W</th><th>ECON</th></tr></thead>
+          <tbody>
+            <tr><td>⚡ <strong>${escapeHTML(bowler.name)}</strong>${bowler.wickets >= 5 ? `<span class="sc-5w-badge">5W🔥</span>` : ''}</td><td>${bowler.oversFormatted}</td><td>${bowler.runsConceded}</td><td><strong style="color:var(--danger);">${bowler.wickets}</strong></td><td>${bowler.economy}</td></tr>
+          </tbody>
+        </table>
+      ` : ''}
+    </div>
+
+    <div class="card" style="padding:10px 14px;">
+      <div class="eyebrow" style="margin-bottom:4px;">Recent Balls</div>
+      <div class="timeline-strip">
+        ${recentBalls.length ? recentBalls.map(b => `
+          <div class="timeline-ball ${b.batRuns === 4 ? 'four' : b.batRuns === 6 ? 'six' : b.wicket ? 'wicket' : b.extraType ? 'extra' : ''}">
+            ${b.wicket ? 'W' : b.extraType ? b.extraType.slice(0,2).toUpperCase() : b.batRuns}
+          </div>
+        `).join('') : '<span class="muted" style="font-size:12px;">Waiting for deliveries...</span>'}
+      </div>
+    </div>
+  `;
 }

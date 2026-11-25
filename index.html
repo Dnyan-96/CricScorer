@@ -67,6 +67,7 @@
       </div>
     </div>
     <div class="header-actions">
+      <button id="cloudAuthHeaderBtn" class="pill-btn cloud-auth-pill" onclick="handleCloudAuthHeaderClick()" title="Sign In / Cloud Sync Profile">☁️ Sign In</button>
       <button id="fxToggleBtn" class="pill-btn fx-toggle-btn active" onclick="toggleBroadcastFx()" title="Toggle On-Screen Celebration Animations" aria-label="Toggle on-screen animations">✨ FX: ON</button>
       <button id="themeToggleBtn" class="icon-btn theme-svg-btn" onclick="toggleTheme()" title="Toggle Light/Dark Theme" aria-label="Toggle theme">
         <svg class="icon-moon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -223,6 +224,15 @@
       </div>
       <div id="dashboardTopPerformersStrip" class="home-performers-strip">
         <span class="muted" style="font-size:12px;">No player records yet.</span>
+      </div>
+
+      <!-- Public Live Match Center (Shared Cloud Feed for All Users) -->
+      <div class="section-title-row" style="margin-top:20px;">
+        <h2>🌍 Public Live Match Center</h2>
+        <button class="link-btn" onclick="refreshPublicLiveCenter(true)">↻ Refresh</button>
+      </div>
+      <div id="publicLiveCenterList" class="stack-list">
+        <div class="empty-state" style="padding:14px;">Loading public matches &amp; tournaments...</div>
       </div>
     </section>
 
@@ -505,6 +515,14 @@
         </div>
       </div>
 
+      <!-- GROUP 0: CLOUD ACCOUNT & PUBLIC SYNC -->
+      <div class="settings-group">
+        <div class="settings-group-title">☁️ Account &amp; Cloud Sync (Supabase)</div>
+        <div class="card" id="settingsCloudAccountCard">
+          <p class="muted" style="font-size:12.5px;">Checking cloud session...</p>
+        </div>
+      </div>
+
       <!-- GROUP 1: DISPLAY & SCORING ERGONOMICS -->
       <div class="settings-group">
         <div class="settings-group-title">📱 Display & Scoring Comfort</div>
@@ -680,6 +698,19 @@
     </section>
       <!-- Printable PDF Template Container (Active during PDF export / print) -->
     <div id="statsPdfPrintContainer" class="print-only"></div>
+    <!-- VIEW 9: PUBLIC SPECTATOR LIVE SCOREBOARD -->
+    <section id="watch-live" class="page">
+      <div class="page-header">
+        <div>
+          <p class="eyebrow">REAL-TIME SPECTATOR BROADCAST</p>
+          <h1>Live Scoreboard</h1>
+        </div>
+        <button class="btn btn-secondary" onclick="exitSpectatorMode()">← Home</button>
+      </div>
+      <div id="spectatorLiveContainer">
+        <div class="empty-state">Connecting to live match broadcast...</div>
+      </div>
+    </section>
   </main>
 
   <!-- Bottom Mobile Navigation Bar -->
@@ -739,6 +770,9 @@
 
   <!-- Toast Notification Container -->
   <div id="toastNotification" role="alert"></div>
+
+  <!-- Supabase JS Client (v2) for Cloud Auth, Public Feed & Realtime Sync -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <!-- Pure Native Application Logic -->
   <script src="app.js"></script>
