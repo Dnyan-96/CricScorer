@@ -7091,17 +7091,28 @@ function openShotZonePickerModal(ballId, runs) {
   const cy = 150;
   const rInner = 34;
   const rOuter = 136;
-  const accentStroke = runs === 6 ? '#00e676' : '#38bdf8';
+  const isLight = document.body.getAttribute('data-theme') === 'light';
+  const accentStroke = isLight
+    ? (runs === 6 ? '#059669' : '#0284c7')
+    : (runs === 6 ? '#00e676' : '#38bdf8');
+  const outerFill = isLight ? '#dcfce7' : '#071f17';
+  const wedgeStroke = isLight ? 'rgba(22, 101, 52, 0.35)' : 'rgba(255, 255, 255, 0.22)';
+  const ringStroke = isLight ? 'rgba(22, 101, 52, 0.42)' : 'rgba(255, 255, 255, 0.18)';
+  const hubFill = isLight ? '#f8fafc' : '#0b1714';
+  const hubStroke = isLight ? 'rgba(22, 101, 52, 0.45)' : 'rgba(255, 255, 255, 0.24)';
+  const markerFill = isLight ? '#334155' : '#94a3b8';
 
   const sectorsSVG = RADIAL_WHEEL_SECTORS.map((sec, idx) => {
     const pathD = buildSectorWedgePath(cx, cy, rInner, rOuter, sec.startDeg, sec.endDeg);
     const midDeg = (sec.startDeg + sec.endDeg) / 2;
     const lblPt = polarToCartesianWheel(cx, cy, 94, midDeg);
-    const fillAlt = idx % 2 === 0 ? 'rgba(16, 185, 129, 0.14)' : 'rgba(16, 185, 129, 0.07)';
+    const fillAlt = isLight
+      ? (idx % 2 === 0 ? '#bbf7d0' : '#dcfce7')
+      : (idx % 2 === 0 ? 'rgba(16, 185, 129, 0.14)' : 'rgba(16, 185, 129, 0.07)');
     return `
       <g onclick="assignShotZoneToBall('${ballId}', '${sec.id}')"
          onmouseenter="previewRadialSectorHover('${sec.id}', '${sec.label}', ${midDeg})">
-        <path class="wagon-sector-wedge" d="${pathD}" fill="${fillAlt}" stroke="rgba(255,255,255,0.22)" stroke-width="1.3" />
+        <path class="wagon-sector-wedge" d="${pathD}" fill="${fillAlt}" stroke="${wedgeStroke}" stroke-width="1.4" />
         <text class="wagon-sector-label" x="${lblPt.x.toFixed(1)}" y="${lblPt.y.toFixed(1)}">${escapeHTML(sec.label)}</text>
       </g>
     `;
@@ -7114,14 +7125,14 @@ function openShotZonePickerModal(ballId, runs) {
       </div>
       <div class="radial-wheel-svg-box">
         <svg viewBox="0 0 300 300" aria-label="8-Zone Cricket Ground Wagon Wheel">
-          <circle cx="150" cy="150" r="142" fill="#071f17" stroke="${accentStroke}" stroke-width="2.5" />
+          <circle cx="150" cy="150" r="142" fill="${outerFill}" stroke="${accentStroke}" stroke-width="2.8" />
           ${sectorsSVG}
-          <circle cx="150" cy="150" r="68" fill="none" stroke="rgba(255,255,255,0.18)" stroke-dasharray="4 4" pointer-events="none" />
-          <line id="radialWheelPreviewRay" x1="150" y1="150" x2="150" y2="30" stroke="${accentStroke}" stroke-width="3.2" stroke-linecap="round" opacity="0" pointer-events="none" />
-          <circle cx="150" cy="150" r="32" fill="#0b1714" stroke="rgba(255,255,255,0.24)" stroke-width="1.5" pointer-events="none" />
+          <circle cx="150" cy="150" r="68" fill="none" stroke="${ringStroke}" stroke-width="1.2" stroke-dasharray="4 4" pointer-events="none" />
+          <line id="radialWheelPreviewRay" x1="150" y1="150" x2="150" y2="30" stroke="${accentStroke}" stroke-width="3.5" stroke-linecap="round" opacity="0" pointer-events="none" />
+          <circle cx="150" cy="150" r="32" fill="${hubFill}" stroke="${hubStroke}" stroke-width="1.6" pointer-events="none" />
           <rect x="144" y="132" width="12" height="36" rx="2" fill="#d97706" pointer-events="none" />
-          <text x="150" y="125" font-size="8" font-weight="900" fill="#94a3b8" text-anchor="middle" pointer-events="none">BOWLER</text>
-          <text x="150" y="179" font-size="8" font-weight="900" fill="#94a3b8" text-anchor="middle" pointer-events="none">KEEPER</text>
+          <text x="150" y="125" font-size="8" font-weight="900" fill="${markerFill}" text-anchor="middle" pointer-events="none">BOWLER</text>
+          <text x="150" y="179" font-size="8" font-weight="900" fill="${markerFill}" text-anchor="middle" pointer-events="none">KEEPER</text>
         </svg>
       </div>
       <div class="radial-wheel-footer">
@@ -7158,6 +7169,13 @@ function buildMatchWagonWheelSVG(matchObj) {
   });
   if (!zonedBalls.length) return '';
 
+  const isLight = document.body.getAttribute('data-theme') === 'light';
+  const fourColor = isLight ? '#0284c7' : '#38bdf8';
+  const sixColor = isLight ? '#059669' : '#00e676';
+  const fieldFill = isLight ? '#dcfce7' : 'rgba(16,185,129,0.12)';
+  const fieldStroke = isLight ? '#166534' : 'rgba(16,185,129,0.45)';
+  const innerRingStroke = isLight ? 'rgba(22,101,52,0.4)' : 'rgba(255,255,255,0.14)';
+
   const zoneCounts = {};
   zonedBalls.forEach(b => {
     zoneCounts[b.shotZone] = (zoneCounts[b.shotZone] || 0) + b.batRuns;
@@ -7173,9 +7191,9 @@ function buildMatchWagonWheelSVG(matchObj) {
     const len = b.batRuns === 6 ? 88 : 74;
     const x2 = (110 + Math.cos(rad) * len).toFixed(1);
     const y2 = (110 + Math.sin(rad) * len).toFixed(1);
-    const stroke = b.batRuns === 6 ? '#00e676' : '#38bdf8';
-    return `<line x1="110" y1="110" x2="${x2}" y2="${y2}" stroke="${stroke}" stroke-width="2.4" stroke-linecap="round" opacity="0.88" />
-            <circle cx="${x2}" cy="${y2}" r="3.2" fill="${stroke}" />`;
+    const stroke = b.batRuns === 6 ? sixColor : fourColor;
+    return `<line x1="110" y1="110" x2="${x2}" y2="${y2}" stroke="${stroke}" stroke-width="2.6" stroke-linecap="round" opacity="0.92" />
+            <circle cx="${x2}" cy="${y2}" r="3.4" fill="${stroke}" />`;
   }).join('');
 
   return `
@@ -7183,13 +7201,13 @@ function buildMatchWagonWheelSVG(matchObj) {
       <div class="eyebrow" style="margin-bottom:4px;">🎯 BOUNDARY WAGON WHEEL (${zonedBalls.length} TAGGED SHOTS)</div>
       <div style="font-size:12px; font-weight:800; color:var(--primary); margin-bottom:8px;">Strongest Zone: ${escapeHTML(topZoneLabel)} (${zoneCounts[topZoneId]} runs)</div>
       <svg viewBox="0 0 220 220" width="210" height="210" style="max-width:100%; display:block; margin:0 auto;">
-        <circle cx="110" cy="110" r="98" fill="rgba(16,185,129,0.12)" stroke="rgba(16,185,129,0.45)" stroke-width="2" />
-        <circle cx="110" cy="110" r="54" fill="none" stroke="rgba(255,255,255,0.14)" stroke-dasharray="4 3" />
+        <circle cx="110" cy="110" r="98" fill="${fieldFill}" stroke="${fieldStroke}" stroke-width="2.2" />
+        <circle cx="110" cy="110" r="54" fill="none" stroke="${innerRingStroke}" stroke-width="1.2" stroke-dasharray="4 3" />
         <rect x="105" y="96" width="10" height="28" rx="2" fill="#d97706" />
         ${linesSVG}
       </svg>
       <div class="muted" style="font-size:11px; margin-top:6px;">
-        <span style="color:#38bdf8; font-weight:800;">● 4s</span> &nbsp;·&nbsp; <span style="color:#00e676; font-weight:800;">● 6s</span>
+        <span style="color:${fourColor}; font-weight:800;">● 4s</span> &nbsp;·&nbsp; <span style="color:${sixColor}; font-weight:800;">● 6s</span>
       </div>
     </div>
   `;

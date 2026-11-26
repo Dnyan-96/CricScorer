@@ -4578,6 +4578,14 @@ body[data-theme="light"] .mdt-tile-btn.wheel-tile.active .mdt-tile-badge { color
 
 body[data-theme="light"] .wagon-sector-label {
   fill: #0f172a;
+  paint-order: stroke;
+  stroke: rgba(255, 255, 255, 0.9);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+body[data-theme="light"] .wagon-sector-wedge:hover {
+  fill: rgba(5, 150, 105, 0.32);
 }
 
 .radial-wheel-footer {
