@@ -4270,3 +4270,135 @@ body[data-theme="light"] .chase-bar-track {
     box-shadow: 0 12px 34px rgba(0, 0, 0, 0.45);
   }
 }
+
+
+/* ==========================================
+   V2.34 CO-SCORER PIN, DLS REVISION, WAGON WHEEL & PWA INSTALL BANNER
+   ========================================== */
+
+.pwa-install-banner {
+  max-width: 900px;
+  margin: 10px auto 0;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.18), rgba(56, 189, 248, 0.14));
+  border: 1px solid rgba(16, 185, 129, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+body[data-theme="light"] .pwa-install-banner {
+  background: linear-gradient(135deg, #ecfdf5, #e0f2fe);
+  border-color: #059669;
+}
+
+.pwa-ib-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.pwa-ib-icon {
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.pwa-ib-left strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.pwa-ib-left p {
+  font-size: 11px;
+  margin: 1px 0 0;
+}
+
+.pwa-ib-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.matchday-tools-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.matchday-tool-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-main);
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.matchday-tool-chip.active {
+  border-color: var(--primary);
+  background: var(--primary-glow);
+  color: var(--primary);
+}
+
+.handover-pin-box {
+  text-align: center;
+  padding: 16px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.16), rgba(56, 189, 248, 0.12));
+  border: 1px solid rgba(16, 185, 129, 0.45);
+  margin-bottom: 12px;
+}
+
+.handover-pin-digits {
+  font-size: 34px;
+  font-weight: 950;
+  letter-spacing: 8px;
+  color: var(--primary);
+  margin: 6px 0;
+}
+
+.wagon-wheel-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.wagon-zone-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  width: 100%;
+}
+
+.wagon-zone-btn {
+  padding: 10px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.wagon-zone-btn:hover,
+.wagon-zone-btn:active {
+  border-color: var(--primary);
+  background: var(--primary-glow);
+}

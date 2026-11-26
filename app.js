@@ -1999,6 +1999,12 @@ async function renderLiveScorerView() {
         ${activeMatch.format === 'Test' ? `<button class="btn btn-secondary" onclick="endInningsPrompt(true)">Declare</button>` : ''}
         <button class="btn btn-primary" onclick="finishMatchPrompt()">Finish</button>
       </div>
+
+      <div class="matchday-tools-strip">
+        <button type="button" class="matchday-tool-chip" onclick="openCoScorerPinModal()">🔑 Handover PIN${activeMatch.handoverPin ? `: ${activeMatch.handoverPin}` : ''}</button>
+        <button type="button" class="matchday-tool-chip" onclick="openDlsRevisionModal()">🌧️ DLS / Revise Overs</button>
+        <button type="button" class="matchday-tool-chip ${shotWheelEnabled ? 'active' : ''}" onclick="toggleShotWheelPreference(!shotWheelEnabled)">🎯 Shot Wheel: ${shotWheelEnabled ? 'ON' : 'OFF'}</button>
+      </div>
     </div>
     </div>
     </div>
@@ -3468,6 +3474,7 @@ async function viewDetailedScorecard(matchId) {
       }).join('')}
 
       ${chartsHTML}
+      ${buildMatchWagonWheelSVG(m)}
     </div>
   `;
 
@@ -4223,6 +4230,8 @@ async function renderSettings() {
     dbGetAll('teams'), dbGetAll('players'), dbGetAll('matches'), dbGetAll('settings')
   ]);
 
+  const shotWheelEl = document.getElementById('settingShotWheel');
+  if (shotWheelEl) shotWheelEl.checked = !!shotWheelEnabled;
   const teamsEl = document.getElementById('dbCountTeams');
   if (teamsEl) teamsEl.textContent = teams.length;
   const playersEl = document.getElementById('dbCountPlayers');
@@ -6149,8 +6158,11 @@ function paintSpectatorScoreboard(row) {
 
   container.innerHTML = `
     <div class="spectator-banner">
-      <span>🔴 READ-ONLY LIVE BROADCAST · Auto-updating</span>
-      <button type="button" class="pill-btn" style="padding:3px 9px; font-size:10.5px;" onclick="shareLiveMatchLink('${row.id}')">📤 Share</button>
+      <span>🔴 LIVE BROADCAST</span>
+      <div style="display:flex; gap:6px;">
+        ${row.status === 'Live' ? `<button type="button" class="pill-btn" style="padding:3px 9px; font-size:10.5px;" onclick="openClaimCoScorerModal('${row.id}')">🔑 Co-Scorer PIN</button>` : ''}
+        <button type="button" class="pill-btn" style="padding:3px 9px; font-size:10.5px;" onclick="shareLiveMatchLink('${row.id}')">📤 Share</button>
+      </div>
     </div>
 
     <div class="scorer-broadcast-hero">
@@ -6851,3 +6863,340 @@ paintSpectatorScoreboard = function(row) {
   `;
   container.insertAdjacentHTML('afterbegin', presenceBarHTML);
 };
+
+
+// ==========================================
+// V2.34: CO-SCORER PIN, DLS REVISION, 8-ZONE WAGON WHEEL & PWA INSTALL
+// ==========================================
+let shotWheelEnabled = false;
+try {
+  shotWheelEnabled = localStorage.getItem('cricscorer_shot_wheel') === '1';
+} catch (e) {}
+
+const WAGON_WHEEL_ZONES = [
+  { id: 'third_man', label: 'Third Man', angleDeg: -135 },
+  { id: 'point', label: 'Point / Gully', angleDeg: -90 },
+  { id: 'cover', label: 'Extra Cover', angleDeg: -45 },
+  { id: 'long_off', label: 'Long-Off', angleDeg: -15 },
+  { id: 'long_on', label: 'Long-On', angleDeg: 15 },
+  { id: 'mid_wicket', label: 'Mid-Wicket', angleDeg: 55 },
+  { id: 'square_leg', label: 'Square Leg', angleDeg: 95 },
+  { id: 'fine_leg', label: 'Fine Leg', angleDeg: 135 }
+];
+
+function toggleShotWheelPreference(enabled) {
+  shotWheelEnabled = !!enabled;
+  try {
+    localStorage.setItem('cricscorer_shot_wheel', shotWheelEnabled ? '1' : '0');
+  } catch (e) {}
+  const el = document.getElementById('settingShotWheel');
+  if (el) el.checked = shotWheelEnabled;
+  showToast(shotWheelEnabled ? '🎯 8-Zone Boundary Wagon Wheel enabled' : '8-Zone Wagon Wheel turned off');
+  if (document.getElementById('live-scorer')?.classList.contains('active')) {
+    renderLiveScorerView();
+  }
+}
+
+const _origRecordBallEventV34 = recordBallEvent;
+recordBallEvent = async function(runs) {
+  await _origRecordBallEventV34(runs);
+  if (shotWheelEnabled && (runs === 4 || runs === 6) && activeMatch) {
+    const inn = activeMatch.innings[activeMatch.innings.length - 1];
+    const lastBall = inn?.balls?.[inn.balls.length - 1];
+    if (lastBall && lastBall.batRuns === runs) {
+      openShotZonePickerModal(lastBall.id, runs);
+    }
+  }
+};
+
+function openShotZonePickerModal(ballId, runs) {
+  const html = `
+    <div class="wagon-wheel-stage">
+      <p class="muted" style="font-size:12px; text-align:center;">Tap where the <strong>${runs}</strong> crossed the rope (or close to skip):</p>
+      <div class="wagon-zone-grid">
+        ${WAGON_WHEEL_ZONES.map(z => `
+          <button type="button" class="wagon-zone-btn" onclick="assignShotZoneToBall('${ballId}', '${z.id}')">
+            <span>${escapeHTML(z.label)}</span>
+            <span style="color:${runs === 6 ? 'var(--primary)' : '#38bdf8'};">${runs}</span>
+          </button>
+        `).join('')}
+      </div>
+    </div>
+  `;
+  openModal(`🎯 ${runs} Runs — Select Shot Zone`, html, null, false);
+}
+
+async function assignShotZoneToBall(ballId, zoneId) {
+  if (!activeMatch) return;
+  const inn = activeMatch.innings[activeMatch.innings.length - 1];
+  const ball = (inn?.balls || []).find(b => b.id === ballId);
+  if (ball) {
+    ball.shotZone = zoneId;
+    await saveActiveMatch();
+    const zObj = WAGON_WHEEL_ZONES.find(z => z.id === zoneId);
+    showToast(`Recorded ${ball.batRuns} to ${zObj?.label || zoneId}`);
+  }
+  closeModal();
+}
+
+function buildMatchWagonWheelSVG(matchObj) {
+  if (!matchObj || !Array.isArray(matchObj.innings)) return '';
+  const zonedBalls = [];
+  matchObj.innings.forEach(inn => {
+    (inn.balls || []).forEach(b => {
+      if (b.shotZone && (b.batRuns === 4 || b.batRuns === 6)) {
+        zonedBalls.push(b);
+      }
+    });
+  });
+  if (!zonedBalls.length) return '';
+
+  const zoneCounts = {};
+  zonedBalls.forEach(b => {
+    zoneCounts[b.shotZone] = (zoneCounts[b.shotZone] || 0) + b.batRuns;
+  });
+  const topZoneId = Object.keys(zoneCounts).sort((a, b) => zoneCounts[b] - zoneCounts[a])[0];
+  const topZoneLabel = WAGON_WHEEL_ZONES.find(z => z.id === topZoneId)?.label || topZoneId;
+
+  const linesSVG = zonedBalls.map((b, idx) => {
+    const z = WAGON_WHEEL_ZONES.find(item => item.id === b.shotZone);
+    if (!z) return '';
+    const jitter = ((idx % 5) - 2) * 4;
+    const rad = ((z.angleDeg + jitter - 90) * Math.PI) / 180;
+    const len = b.batRuns === 6 ? 88 : 74;
+    const x2 = (110 + Math.cos(rad) * len).toFixed(1);
+    const y2 = (110 + Math.sin(rad) * len).toFixed(1);
+    const stroke = b.batRuns === 6 ? '#00e676' : '#38bdf8';
+    return `<line x1="110" y1="110" x2="${x2}" y2="${y2}" stroke="${stroke}" stroke-width="2.4" stroke-linecap="round" opacity="0.88" />
+            <circle cx="${x2}" cy="${y2}" r="3.2" fill="${stroke}" />`;
+  }).join('');
+
+  return `
+    <div class="card" style="margin-top:12px; padding:12px; text-align:center;">
+      <div class="eyebrow" style="margin-bottom:4px;">🎯 BOUNDARY WAGON WHEEL (${zonedBalls.length} TAGGED SHOTS)</div>
+      <div style="font-size:12px; font-weight:800; color:var(--primary); margin-bottom:8px;">Strongest Zone: ${escapeHTML(topZoneLabel)} (${zoneCounts[topZoneId]} runs)</div>
+      <svg viewBox="0 0 220 220" width="210" height="210" style="max-width:100%; display:block; margin:0 auto;">
+        <circle cx="110" cy="110" r="98" fill="rgba(16,185,129,0.12)" stroke="rgba(16,185,129,0.45)" stroke-width="2" />
+        <circle cx="110" cy="110" r="54" fill="none" stroke="rgba(255,255,255,0.14)" stroke-dasharray="4 3" />
+        <rect x="105" y="96" width="10" height="28" rx="2" fill="#d97706" />
+        ${linesSVG}
+      </svg>
+      <div class="muted" style="font-size:11px; margin-top:6px;">
+        <span style="color:#38bdf8; font-weight:800;">● 4s</span> &nbsp;·&nbsp; <span style="color:#00e676; font-weight:800;">● 6s</span>
+      </div>
+    </div>
+  `;
+}
+
+// ==========================================
+// CO-SCORER 4-DIGIT HANDOVER PIN
+// ==========================================
+async function openCoScorerPinModal() {
+  if (!activeMatch) return;
+  if (!activeMatch.handoverPin) {
+    activeMatch.handoverPin = String(Math.floor(1000 + Math.random() * 9000));
+    await saveActiveMatch();
+  }
+  if (currentCloudUser) {
+    await pushSingleMatchToCloud(activeMatch);
+  }
+
+  const shareUrl = `${window.location.origin}${window.location.pathname}#watch=${encodeURIComponent(activeMatch.id)}`;
+  const html = `
+    <div>
+      <div class="handover-pin-box">
+        <div class="eyebrow" style="margin:0;">4-DIGIT CO-SCORER HANDOVER PIN</div>
+        <div class="handover-pin-digits">${activeMatch.handoverPin}</div>
+        <div class="muted" style="font-size:11.5px;">Share this PIN with a teammate on the field so they can claim live scoring control on their phone.</div>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+        <button type="button" class="btn btn-secondary" onclick="regenerateCoScorerPin()">🔄 New PIN</button>
+        <button type="button" class="btn btn-primary" onclick="copyCoScorerInvite('${shareUrl}', '${activeMatch.handoverPin}')">📋 Copy Invite</button>
+      </div>
+    </div>
+  `;
+  openModal('Co-Scorer Handover', html, null, false);
+}
+
+async function regenerateCoScorerPin() {
+  if (!activeMatch) return;
+  activeMatch.handoverPin = String(Math.floor(1000 + Math.random() * 9000));
+  await saveActiveMatch();
+  if (currentCloudUser) await pushSingleMatchToCloud(activeMatch);
+  closeModal();
+  openCoScorerPinModal();
+}
+
+function copyCoScorerInvite(url, pin) {
+  const msg = `🏏 Co-Scorer Handover for ${activeMatch?.title || 'Live Match'}\n1. Open Live Match: ${url}\n2. Tap "🔑 Co-Scorer PIN" and enter PIN: ${pin}`;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(msg).then(() => showToast('Co-Scorer invite & PIN copied!'));
+  } else {
+    prompt('Copy Co-Scorer invite:', msg);
+  }
+}
+
+async function openClaimCoScorerModal(matchId) {
+  const html = `
+    <div>
+      <p class="muted" style="font-size:12px; margin-bottom:10px;">Enter the 4-digit Handover PIN shown on the primary scorer's phone to take over live scoring for this match.</p>
+      <div class="form-group">
+        <label>4-Digit Match PIN *</label>
+        <input type="text" id="claimPinInput" maxlength="4" inputmode="numeric" placeholder="e.g. 4829" style="font-size:20px; text-align:center; letter-spacing:6px; font-weight:900;">
+      </div>
+    </div>
+  `;
+
+  openModal('Claim Co-Scorer Control', html, async () => {
+    const entered = (document.getElementById('claimPinInput')?.value || '').trim();
+    if (!/^\d{4}$/.test(entered)) {
+      alert('Please enter the 4-digit numeric PIN.');
+      return false;
+    }
+
+    let targetMatch = spectatorMatchData?.match_json || null;
+    if (!targetMatch && sbClient) {
+      const { data } = await sbClient.from('matches').select('match_json').eq('id', matchId).maybeSingle();
+      targetMatch = data?.match_json || null;
+    }
+
+    if (!targetMatch || !targetMatch.handoverPin) {
+      alert('The primary scorer has not generated a Handover PIN for this match yet.');
+      return false;
+    }
+
+    if (entered !== String(targetMatch.handoverPin)) {
+      alert('Incorrect PIN. Check the 4-digit PIN on the primary scorer screen.');
+      return false;
+    }
+
+    await dbPut('matches', targetMatch);
+    activeMatch = targetMatch;
+    if (spectatorRealtimeChannel && sbClient) {
+      sbClient.removeChannel(spectatorRealtimeChannel);
+      spectatorRealtimeChannel = null;
+    }
+    spectatorWatchMatchId = null;
+    showToast('✅ Co-Scorer control claimed! You can now score deliveries.');
+    navigate('live-scorer');
+    return true;
+  });
+}
+
+// ==========================================
+// DLS / RAIN-CURTAILED OVERS & TARGET REVISION
+// ==========================================
+function openDlsRevisionModal() {
+  if (!activeMatch) return;
+  const curOvers = activeMatch.overs || 20;
+  const inn1 = activeMatch.innings?.[0];
+  const inn1Runs = inn1 ? CricketEngine.calculateInnings(inn1, inn1.squad, inn1.bowlingSquad).totalRuns : 0;
+  const curTarget = activeMatch.target || (inn1Runs ? inn1Runs + 1 : '');
+
+  const html = `
+    <div>
+      <p class="muted" style="font-size:12px; margin-bottom:10px;">Adjust total match overs (e.g., rain or fading light) and set a revised DLS target.</p>
+      <div class="field-grid" style="margin-bottom:10px;">
+        <div class="form-group">
+          <label>Revised Overs Per Side *</label>
+          <input type="number" id="dlsRevisedOvers" min="1" max="50" value="${curOvers}" oninput="recalcDlsSuggestion(${curOvers}, ${inn1Runs})">
+        </div>
+        <div class="form-group">
+          <label>Target Runs ${activeMatch.innings.length < 2 ? '(1st Inn)' : '*'}</label>
+          <input type="number" id="dlsRevisedTarget" min="1" value="${curTarget}" ${activeMatch.innings.length < 2 ? 'placeholder="Auto after 1st inn"' : ''}>
+        </div>
+      </div>
+      <div id="dlsSuggestionNote" class="muted" style="font-size:11.5px;"></div>
+    </div>
+  `;
+
+  openModal('🌧️ DLS / Revise Match Overs & Target', html, async () => {
+    const newOvers = Math.max(1, parseInt(document.getElementById('dlsRevisedOvers')?.value || String(curOvers), 10));
+    const targetRaw = (document.getElementById('dlsRevisedTarget')?.value || '').trim();
+    activeMatch.overs = newOvers;
+    if (activeMatch.innings.length >= 2 && targetRaw) {
+      activeMatch.target = Math.max(1, parseInt(targetRaw, 10));
+    }
+    await saveActiveMatch();
+    showToast(`Match revised to ${newOvers} overs${activeMatch.target ? ` · Target ${activeMatch.target}` : ''}`);
+    renderLiveScorerView();
+    return true;
+  });
+}
+
+function recalcDlsSuggestion(origOvers, inn1Runs) {
+  const newOv = parseInt(document.getElementById('dlsRevisedOvers')?.value || '0', 10);
+  const noteEl = document.getElementById('dlsSuggestionNote');
+  const targetInput = document.getElementById('dlsRevisedTarget');
+  if (!newOv || !origOvers || !inn1Runs || !noteEl) return;
+  const proRataTarget = Math.max(1, Math.round((inn1Runs * newOv) / origOvers) + 1);
+  noteEl.innerHTML = `Suggested pro-rata DLS target for ${newOv} overs: <strong>${proRataTarget} runs</strong>`;
+  if (targetInput && activeMatch?.innings?.length >= 2) {
+    targetInput.value = proRataTarget;
+  }
+}
+
+// ==========================================
+// SMART IN-APP PWA INSTALL & ANDROID APK GUIDE ($0 FREE)
+// ==========================================
+let deferredPwaInstallPrompt = null;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPwaInstallPrompt = e;
+  try {
+    if (localStorage.getItem('cricscorer_pwa_banner_dismissed') === '1') return;
+  } catch (err) {}
+  const banner = document.getElementById('pwaInstallBanner');
+  if (banner) banner.style.display = 'flex';
+});
+
+window.addEventListener('appinstalled', () => {
+  deferredPwaInstallPrompt = null;
+  const banner = document.getElementById('pwaInstallBanner');
+  if (banner) banner.style.display = 'none';
+  showToast('🎉 CricScorer installed on your home screen!');
+});
+
+function dismissPwaInstallBanner() {
+  const banner = document.getElementById('pwaInstallBanner');
+  if (banner) banner.style.display = 'none';
+  try {
+    localStorage.setItem('cricscorer_pwa_banner_dismissed', '1');
+  } catch (e) {}
+}
+
+async function triggerPwaInstallPrompt() {
+  if (deferredPwaInstallPrompt) {
+    deferredPwaInstallPrompt.prompt();
+    const choice = await deferredPwaInstallPrompt.userChoice;
+    if (choice?.outcome === 'accepted') {
+      dismissPwaInstallBanner();
+    }
+    deferredPwaInstallPrompt = null;
+    return;
+  }
+
+  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const msg = isIos
+    ? 'To install CricScorer on iPhone/iPad:\n\n1. Tap the Share button (□↑) at the bottom of Safari.\n2. Scroll down and tap "Add to Home Screen".'
+    : 'To install CricScorer as a full-screen app:\n\n1. Open your browser menu (⋮ in Chrome/Edge).\n2. Tap "Install app" or "Add to Home screen".';
+  alert(msg);
+}
+
+function openAndroidApkGuideModal() {
+  const liveUrl = window.location.origin + window.location.pathname;
+  const html = `
+    <div style="font-size:12.5px; line-height:1.55;">
+      <p style="margin-bottom:8px;">You can generate a free, standalone Android <code>.apk</code> package for <strong>CricScorer</strong> in 2 minutes with <strong>$0 fees</strong> using Microsoft's open-source <strong>PWABuilder</strong>:</p>
+      <ol style="padding-left:18px; display:flex; flex-direction:column; gap:6px; margin-bottom:12px;">
+        <li>Copy your live URL: <code>${escapeHTML(liveUrl)}</code></li>
+        <li>Open <strong>pwabuilder.com</strong> in your desktop browser and paste your URL.</li>
+        <li>Click <strong>Package for Stores → Android → Generate Package</strong> (select <em>Signing Key: New</em>).</li>
+        <li>Download the ZIP containing your signed <code>.apk</code> and share it directly in your cricket club WhatsApp group!</li>
+      </ol>
+      <button type="button" class="btn btn-primary" style="width:100%;" onclick="navigator.clipboard?.writeText('${liveUrl}').then(() => showToast('Live PWA URL copied!'))">📋 Copy Live App URL</button>
+    </div>
+  `;
+  openModal('📦 Free Android APK Packaging Guide ($0)', html, null, false);
+}

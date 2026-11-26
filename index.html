@@ -84,6 +84,21 @@
   </header>
 
   <!-- Main Content Container with 9 Distinct Views -->
+    <!-- Smart In-App PWA Install Banner (Android Chrome / Desktop / iOS Guide) -->
+  <div id="pwaInstallBanner" class="pwa-install-banner" style="display:none;" role="region" aria-label="Install CricScorer App">
+    <div class="pwa-ib-left">
+      <span class="pwa-ib-icon">📲</span>
+      <div>
+        <strong>Install CricScorer App</strong>
+        <p class="muted" id="pwaInstallSubText">Full-screen offline scoring &amp; instant home-screen launch ($0 Free)</p>
+      </div>
+    </div>
+    <div class="pwa-ib-actions">
+      <button type="button" class="btn btn-primary" style="padding:6px 12px; font-size:11.5px;" id="pwaInstallActionBtn" onclick="triggerPwaInstallPrompt()">Install</button>
+      <button type="button" class="icon-btn" style="width:28px; height:28px; font-size:14px;" onclick="dismissPwaInstallBanner()" aria-label="Dismiss install banner">&times;</button>
+    </div>
+  </div>
+
   <main id="mainApp">
     <!-- VIEW 1: MODERN HOME DASHBOARD -->
     <section id="dashboard" class="page active">
@@ -560,6 +575,35 @@
               <input type="checkbox" id="settingHaptics" onchange="saveAppSetting('haptics', this.checked)">
               <span class="slider"></span>
             </label>
+          </div>
+
+          <div class="setting-item">
+            <div>
+              <strong>8-Zone Boundary Wagon Wheel</strong>
+              <p class="muted">Prompt for shot direction (Cover, Straight, Mid-Wicket, etc.) on 4s &amp; 6s.</p>
+            </div>
+            <label class="switch" aria-label="8-Zone Boundary Wagon Wheel">
+              <input type="checkbox" id="settingShotWheel" onchange="toggleShotWheelPreference(this.checked)">
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- GROUP 1B: ANDROID APP & ZERO-COST MOBILE INSTALL -->
+      <div class="settings-group">
+        <div class="settings-group-title">📲 Mobile App Install &amp; Android APK ($0 Free)</div>
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px;">
+            <div>
+              <strong style="font-size:13.5px;">Install CricScorer on Phone</strong>
+              <p class="muted" style="font-size:12px; margin-top:2px;">Works offline at cricket grounds with zero browser address bar.</p>
+            </div>
+            <button type="button" class="btn btn-primary" style="padding:7px 12px; font-size:11.5px; white-space:nowrap;" onclick="triggerPwaInstallPrompt()">📲 Install App</button>
+          </div>
+          <div style="padding-top:8px; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; gap:10px;">
+            <span class="muted" style="font-size:11.5px;">Need a standalone Android <code>.apk</code> file for WhatsApp distribution?</span>
+            <button type="button" class="btn btn-secondary" style="padding:6px 10px; font-size:11px; white-space:nowrap;" onclick="openAndroidApkGuideModal()">📦 Free APK Guide</button>
           </div>
         </div>
       </div>
