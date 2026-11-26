@@ -1,0 +1,18 @@
+name: Keep Supabase Free Tier Awake
+
+on:
+  schedule:
+    # Runs every 5 days at 06:00 UTC so Supabase Free Tier never pauses after 7 days of inactivity
+    - cron: '0 6 */5 * *'
+  workflow_dispatch:
+
+jobs:
+  ping-supabase:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Public Matches Endpoint
+        run: |
+          curl -fsS "https://fdsvwotdhmvudkwuuceb.supabase.co/rest/v1/matches?select=id&limit=1" \
+            -H "apikey: sb_publishable_QbRKDXz3ymBWCyRlUBEljA_ihM-GYbL" \
+            -H "Authorization: Bearer sb_publishable_QbRKDXz3ymBWCyRlUBEljA_ihM-GYbL" > /dev/null
+          echo "Supabase Free Tier keep-alive ping succeeded."
