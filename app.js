@@ -4612,6 +4612,400 @@ async function syncTournamentFixtureCompletion(matchObj, stats1, stats2) {
   await saveAllTournaments(tournaments);
 }
 
+let activeTournamentSubTab = 'standings';
+
+function switchTournamentSubTab(tab) {
+  activeTournamentSubTab = tab;
+  renderTournamentsView();
+}
+
+function computeTournamentPlayerCaps(tournament, teamsMap, allMatches) {
+  const tourMatches = allMatches.filter(m =>
+    m.tournamentId === tournament.id ||
+    (tournament.fixtures || []).some(f => f.matchId && f.matchId === m.id)
+  );
+
+  const batters = {};
+  const bowlers = {};
+  const mvpMap = {};
+
+  const ensureBatter = (id, name, teamName) => {
+    if (!batters[id]) {
+      batters[id] = { id, name: name || 'Batter', teamName: teamName || 'Team', innings: 0, runs: 0, balls: 0, fours: 0, sixes: 0, fifties: 0, hundreds: 0, highScore: 0 };
+    }
+    return batters[id];
+  };
+
+  const ensureBowler = (id, name, teamName) => {
+    if (!bowlers[id]) {
+      bowlers[id] = { id, name: name || 'Bowler', teamName: teamName || 'Team', innings: 0, legalBalls: 0, runsConceded: 0, wickets: 0, fiveW: 0, bestW: 0, bestR: 999 };
+    }
+    return bowlers[id];
+  };
+
+  const addMvp = (id, name, teamName, pts) => {
+    if (!id) return;
+    if (!mvpMap[id]) mvpMap[id] = { id, name: name || 'Player', teamName: teamName || 'Team', pts: 0, runs: 0, wickets: 0 };
+    mvpMap[id].pts += pts;
+  };
+
+  tourMatches.forEach(m => {
+    (m.innings || []).forEach(inn => {
+      const batTeamName = teamsMap[inn.batting] || (inn.batting === m.a ? m.teamAName : m.teamBName) || 'Team';
+      const bowlTeamName = teamsMap[inn.bowling] || (inn.bowling === m.a ? m.teamAName : m.teamBName) || 'Team';
+      const st = CricketEngine.calculateInnings(inn, inn.squad || [], inn.bowlingSquad || []);
+
+      (st.batters || []).forEach(b => {
+        if (b.balls > 0 || b.runs > 0 || b.isOut) {
+          const rec = ensureBatter(b.id, b.name, batTeamName);
+          rec.innings += 1;
+          rec.runs += b.runs;
+          rec.balls += b.balls;
+          rec.fours += b.fours || 0;
+          rec.sixes += b.sixes || 0;
+          if (b.runs >= 100) rec.hundreds += 1;
+          else if (b.runs >= 50) rec.fifties += 1;
+          if (b.runs > rec.highScore) rec.highScore = b.runs;
+
+          let pts = b.runs + (b.fours || 0) * 2 + (b.sixes || 0) * 4;
+          if (b.runs >= 50) pts += 15;
+          if (b.runs >= 100) pts += 30;
+          addMvp(b.id, b.name, batTeamName, pts);
+          mvpMap[b.id].runs += b.runs;
+        }
+      });
+
+      (st.bowlers || []).forEach(bo => {
+        if (bo.legalBalls > 0 || bo.wickets > 0 || bo.wides > 0 || bo.noBalls > 0) {
+          const rec = ensureBowler(bo.id, bo.name, bowlTeamName);
+          rec.innings += 1;
+          rec.legalBalls += bo.legalBalls;
+          rec.runsConceded += bo.runsConceded;
+          rec.wickets += bo.wickets;
+          if (bo.wickets >= 5) rec.fiveW += 1;
+          if (bo.wickets > rec.bestW || (bo.wickets === rec.bestW && bo.runsConceded < rec.bestR)) {
+            rec.bestW = bo.wickets;
+            rec.bestR = bo.runsConceded;
+          }
+
+          let pts = bo.wickets * 25 + (bo.maidens || 0) * 10;
+          if (bo.wickets >= 5) pts += 25;
+          addMvp(bo.id, bo.name, bowlTeamName, pts);
+          mvpMap[bo.id].wickets += bo.wickets;
+        }
+      });
+    });
+  });
+
+  const orangeList = Object.values(batters).map(b => ({
+    ...b,
+    sr: b.balls > 0 ? ((b.runs / b.balls) * 100).toFixed(1) : '0.0'
+  })).sort((a, b) => (b.runs - a.runs) || (Number(b.sr) - Number(a.sr)));
+
+  const purpleList = Object.values(bowlers).map(bo => ({
+    ...bo,
+    overs: `${Math.floor(bo.legalBalls / 6)}.${bo.legalBalls % 6}`,
+    econ: bo.legalBalls > 0 ? ((bo.runsConceded / bo.legalBalls) * 6).toFixed(2) : '0.00',
+    bestFig: bo.bestR < 999 ? `${bo.bestW}/${bo.bestR}` : `${bo.bestW}/0`
+  })).sort((a, b) => (b.wickets - a.wickets) || (Number(a.econ) - Number(b.econ)));
+
+  const mvpList = Object.values(mvpMap).sort((a, b) => b.pts - a.pts);
+
+  return { orangeList, purpleList, mvpList };
+}
+
+function buildTournamentLeaderboardHTML(subTab, standings, caps, fixtures, teamsMap, allMatches, isOrganizer = false, tournId = '') {
+  if (subTab === 'orange') {
+    const leader = caps.orangeList[0];
+    return `
+      ${leader ? `
+        <div class="cap-spotlight-card orange-cap">
+          <div>
+            <div style="font-size:10px; font-weight:900; letter-spacing:0.8px; color:#fb923c;">🧢 ORANGE CAP HOLDER</div>
+            <div style="font-size:16px; font-weight:950; margin:2px 0;">${escapeHTML(leader.name)}</div>
+            <div class="muted" style="font-size:11.5px;">${escapeHTML(leader.teamName)} · HS ${leader.highScore} · SR ${leader.sr}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:24px; font-weight:950; color:#f97316;">${leader.runs}</div>
+            <div class="muted" style="font-size:10.5px; font-weight:800;">RUNS (${leader.innings} inn)</div>
+          </div>
+        </div>
+      ` : ''}
+      <div class="card" style="padding:10px; overflow-x:auto;">
+        <table class="crease-table">
+          <thead><tr><th>#</th><th>Batter</th><th>Inn</th><th>Runs</th><th>4s/6s</th><th>SR</th></tr></thead>
+          <tbody>
+            ${caps.orangeList.length ? caps.orangeList.map((b, i) => `
+              <tr>
+                <td><strong>${i === 0 ? '🧢' : i + 1}</strong></td>
+                <td><strong>${escapeHTML(b.name)}</strong><br><small class="muted">${escapeHTML(b.teamName)}</small></td>
+                <td>${b.innings}</td>
+                <td><strong style="color:#f97316;">${b.runs}</strong></td>
+                <td>${b.fours}/${b.sixes}</td>
+                <td>${b.sr}</td>
+              </tr>
+            `).join('') : '<tr><td colspan="6" class="muted" style="text-align:center; padding:14px;">Score a tournament match to populate Orange Cap stats.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  if (subTab === 'purple') {
+    const leader = caps.purpleList[0];
+    return `
+      ${leader ? `
+        <div class="cap-spotlight-card purple-cap">
+          <div>
+            <div style="font-size:10px; font-weight:900; letter-spacing:0.8px; color:#c084fc;">🟣 PURPLE CAP HOLDER</div>
+            <div style="font-size:16px; font-weight:950; margin:2px 0;">${escapeHTML(leader.name)}</div>
+            <div class="muted" style="font-size:11.5px;">${escapeHTML(leader.teamName)} · Best ${leader.bestFig} · Econ ${leader.econ}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:24px; font-weight:950; color:#a855f7;">${leader.wickets}</div>
+            <div class="muted" style="font-size:10.5px; font-weight:800;">WKTS (${leader.overs} ov)</div>
+          </div>
+        </div>
+      ` : ''}
+      <div class="card" style="padding:10px; overflow-x:auto;">
+        <table class="crease-table">
+          <thead><tr><th>#</th><th>Bowler</th><th>Ov</th><th>Wkts</th><th>Best</th><th>Econ</th></tr></thead>
+          <tbody>
+            ${caps.purpleList.length ? caps.purpleList.map((bo, i) => `
+              <tr>
+                <td><strong>${i === 0 ? '🟣' : i + 1}</strong></td>
+                <td><strong>${escapeHTML(bo.name)}</strong><br><small class="muted">${escapeHTML(bo.teamName)}</small></td>
+                <td>${bo.overs}</td>
+                <td><strong style="color:#a855f7;">${bo.wickets}</strong></td>
+                <td>${bo.bestFig}</td>
+                <td>${bo.econ}</td>
+              </tr>
+            `).join('') : '<tr><td colspan="6" class="muted" style="text-align:center; padding:14px;">Score a tournament match to populate Purple Cap stats.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  if (subTab === 'mvp') {
+    const leader = caps.mvpList[0];
+    return `
+      ${leader ? `
+        <div class="cap-spotlight-card mvp-cap">
+          <div>
+            <div style="font-size:10px; font-weight:900; letter-spacing:0.8px; color:var(--primary);">🌟 TOURNAMENT MVP LEADER</div>
+            <div style="font-size:16px; font-weight:950; margin:2px 0;">${escapeHTML(leader.name)}</div>
+            <div class="muted" style="font-size:11.5px;">${escapeHTML(leader.teamName)} · ${leader.runs} Runs &amp; ${leader.wickets} Wickets</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:24px; font-weight:950; color:var(--primary);">${leader.pts}</div>
+            <div class="muted" style="font-size:10.5px; font-weight:800;">IMPACT PTS</div>
+          </div>
+        </div>
+      ` : ''}
+      <div class="card" style="padding:10px; overflow-x:auto;">
+        <table class="crease-table">
+          <thead><tr><th>#</th><th>Player</th><th>Runs</th><th>Wkts</th><th>MVP Pts</th></tr></thead>
+          <tbody>
+            ${caps.mvpList.length ? caps.mvpList.map((p, i) => `
+              <tr>
+                <td><strong>${i === 0 ? '🌟' : i + 1}</strong></td>
+                <td><strong>${escapeHTML(p.name)}</strong><br><small class="muted">${escapeHTML(p.teamName)}</small></td>
+                <td>${p.runs}</td>
+                <td>${p.wickets}</td>
+                <td><strong style="color:var(--primary);">${p.pts}</strong></td>
+              </tr>
+            `).join('') : '<tr><td colspan="5" class="muted" style="text-align:center; padding:14px;">No tournament impact points recorded yet.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  // Default: Standings & Fixtures
+  const hasSemiFinals = fixtures.some(f => (f.roundLabel || '').toLowerCase().includes('semi-final'));
+  const hasGrandFinal = fixtures.some(f => (f.roundLabel || '').toLowerCase().includes('grand final'));
+  const completedSemis = fixtures.filter(f => (f.roundLabel || '').toLowerCase().includes('semi-final') && f.status === 'Completed');
+
+  let knockoutBarHTML = '';
+  if (isOrganizer) {
+    if (!hasSemiFinals && standings.length >= 4) {
+      knockoutBarHTML = `
+        <div class="knockout-action-bar">
+          <div style="font-size:11.5px; font-weight:800;">⚡ League Stage Ready for Playoffs</div>
+          <button type="button" class="btn btn-primary" style="padding:6px 11px; font-size:11px;" onclick="seedTop4Knockouts('${tournId}')">Seed Top 4 to Semi-Finals</button>
+        </div>`;
+    } else if (hasSemiFinals && !hasGrandFinal && completedSemis.length >= 2) {
+      knockoutBarHTML = `
+        <div class="knockout-action-bar">
+          <div style="font-size:11.5px; font-weight:800;">👑 Both Semi-Finals Complete!</div>
+          <button type="button" class="btn btn-primary" style="padding:6px 11px; font-size:11px;" onclick="seedTournamentGrandFinal('${tournId}')">Generate Grand Final</button>
+        </div>`;
+    }
+  }
+
+  return `
+    ${knockoutBarHTML}
+    <div class="section-title-row">
+      <h2>📊 Points Table &amp; NRR</h2>
+      <span class="muted" style="font-size:11px;">Win = 2 pts · Tie = 1 pt</span>
+    </div>
+    <div class="card" style="padding:10px; margin-bottom:16px; overflow-x:auto;">
+      <table class="crease-table">
+        <thead>
+          <tr><th>#</th><th>Team</th><th>M</th><th>W</th><th>L</th><th>NRR</th><th>PTS</th></tr>
+        </thead>
+        <tbody>
+          ${standings.map((row, idx) => `
+            <tr>
+              <td><strong>${idx + 1}</strong></td>
+              <td><strong>${escapeHTML(row.teamName)}</strong>${idx < 4 && standings.length >= 4 ? ' <small style="color:var(--primary); font-weight:900;">Q</small>' : ''}</td>
+              <td>${row.played}</td>
+              <td>${row.won}</td>
+              <td>${row.lost}</td>
+              <td style="font-weight:700; color:${row.nrr >= 0 ? 'var(--primary)' : 'var(--danger)'};">${row.nrr >= 0 ? '+' : ''}${row.nrr.toFixed(3)}</td>
+              <td><strong style="color:var(--primary); font-size:13px;">${row.points}</strong></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section-title-row">
+      <h2>🗓️ Match Schedule (${fixtures.length})</h2>
+      ${isOrganizer ? `<button type="button" class="link-btn" onclick="openAddFixtureModal('${tournId}')">＋ Add Fixture</button>` : ''}
+    </div>
+
+    <div>
+      ${fixtures.map(fx => {
+        const nameA = teamsMap[fx.teamAId] || 'Team A';
+        const nameB = teamsMap[fx.teamBId] || 'Team B';
+        const linkedMatch = fx.matchId ? allMatches.find(m => m.id === fx.matchId) : null;
+        const effectiveStatus = linkedMatch ? linkedMatch.status : fx.status;
+        const statusCls = effectiveStatus === 'Completed' ? 'completed' : effectiveStatus === 'Live' ? 'live' : 'scheduled';
+
+        return `
+          <div class="tourn-fixture-card">
+            <div class="tourn-fixture-top">
+              <span>MATCH #${fx.matchNumber} · ${escapeHTML(fx.roundLabel || 'League')}</span>
+              <span class="tourn-status-badge ${statusCls}">${escapeHTML(effectiveStatus)}</span>
+            </div>
+            <div class="tourn-fixture-teams">
+              <span>${escapeHTML(nameA)}</span>
+              <span class="tourn-vs-pill">VS</span>
+              <span>${escapeHTML(nameB)}</span>
+            </div>
+            ${(linkedMatch?.result || fx.result) ? `
+              <div style="margin-top:6px; font-size:11.5px; font-weight:800; color:var(--primary);">
+                🏆 ${escapeHTML(linkedMatch?.result || fx.result)}
+              </div>
+            ` : ''}
+            <div style="margin-top:10px; display:flex; justify-content:flex-end; gap:8px;">
+              ${isOrganizer ? (
+                effectiveStatus === 'Completed' && linkedMatch
+                  ? `<button type="button" class="btn btn-secondary" style="padding:6px 11px; font-size:11px;" onclick="viewMatchScorecardModal('${linkedMatch.id}')">📋 Scorecard</button>`
+                  : `<button type="button" class="btn btn-primary" style="padding:6px 12px; font-size:11.5px;" onclick="launchTournamentFixture('${tournId}', '${fx.id}')">${effectiveStatus === 'Live' ? '⚡ Resume Match' : '⚡ Score Match'}</button>`
+              ) : (
+                fx.matchId
+                  ? `<button type="button" class="btn btn-primary" style="padding:5px 11px; font-size:11px;" onclick="openSpectatorLiveMatch('${fx.matchId}')">📺 Watch Scoreboard</button>`
+                  : ''
+              )}
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+async function seedTop4Knockouts(tournId) {
+  const [tournaments, teams, allMatches] = await Promise.all([
+    getAllTournaments(),
+    dbGetAll('teams'),
+    dbGetAll('matches')
+  ]);
+  const tIdx = tournaments.findIndex(t => t.id === tournId);
+  if (tIdx === -1) return;
+  const tourn = tournaments[tIdx];
+  const teamsMap = {};
+  teams.forEach(t => { teamsMap[t.id] = t.name; });
+
+  const standings = computeTournamentStandings(tourn, teamsMap, allMatches);
+  if (standings.length < 4) {
+    alert('At least 4 teams are required to seed Top-4 Semi-Finals.');
+    return;
+  }
+
+  const [r1, r2, r3, r4] = standings;
+  if (!confirm(`Seed Top 4 Knockouts?
+
+• Semi-Final 1: #1 ${r1.teamName} vs #4 ${r4.teamName}
+• Semi-Final 2: #2 ${r2.teamName} vs #3 ${r3.teamName}`)) return;
+
+  let nextNum = (tourn.fixtures?.length || 0) + 1;
+  tourn.fixtures.push(
+    {
+      id: generateId(),
+      matchNumber: nextNum++,
+      roundLabel: 'Semi-Final 1 (#1 vs #4)',
+      teamAId: r1.teamId,
+      teamBId: r4.teamId,
+      status: 'Scheduled',
+      matchId: null,
+      result: '',
+      winnerTeamId: null
+    },
+    {
+      id: generateId(),
+      matchNumber: nextNum++,
+      roundLabel: 'Semi-Final 2 (#2 vs #3)',
+      teamAId: r2.teamId,
+      teamBId: r3.teamId,
+      status: 'Scheduled',
+      matchId: null,
+      result: '',
+      winnerTeamId: null
+    }
+  );
+
+  await saveAllTournaments(tournaments);
+  showToast('Semi-Finals seeded from Top 4 Standings!');
+  renderTournamentsView();
+}
+
+async function seedTournamentGrandFinal(tournId) {
+  const tournaments = await getAllTournaments();
+  const tIdx = tournaments.findIndex(t => t.id === tournId);
+  if (tIdx === -1) return;
+  const tourn = tournaments[tIdx];
+
+  const completedSemis = (tourn.fixtures || []).filter(f =>
+    (f.roundLabel || '').toLowerCase().includes('semi-final') && f.status === 'Completed' && f.winnerTeamId
+  );
+  if (completedSemis.length < 2) {
+    alert('Both Semi-Finals must have a completed winner before generating the Grand Final.');
+    return;
+  }
+
+  const finalistA = completedSemis[0].winnerTeamId;
+  const finalistB = completedSemis[1].winnerTeamId;
+  tourn.fixtures.push({
+    id: generateId(),
+    matchNumber: (tourn.fixtures?.length || 0) + 1,
+    roundLabel: '👑 Grand Final',
+    teamAId: finalistA,
+    teamBId: finalistB,
+    status: 'Scheduled',
+    matchId: null,
+    result: '',
+    winnerTeamId: null
+  });
+
+  await saveAllTournaments(tournaments);
+  showToast('👑 Grand Final scheduled!');
+  renderTournamentsView();
+}
+
 async function renderTournamentsView() {
   const container = document.getElementById('tournamentsContainer');
   if (!container) return;
@@ -4630,7 +5024,7 @@ async function renderTournamentsView() {
       <div class="empty-state" style="padding:26px 16px;">
         <div style="font-size:34px; margin-bottom:8px;">🏆</div>
         <h3 style="margin-bottom:6px;">No Tournaments Created Yet</h3>
-        <p class="muted" style="margin-bottom:14px;">Create a league or knockout cup, add competing teams, auto-generate match schedules, and track live points &amp; NRR.</p>
+        <p class="muted" style="margin-bottom:14px;">Create a league or knockout cup, add competing teams, auto-generate match schedules, and track live points, NRR &amp; Orange/Purple Caps.</p>
         <button class="btn btn-primary" onclick="openCreateTournamentModal()">＋ Create Your First Tournament</button>
       </div>
     `;
@@ -4643,6 +5037,7 @@ async function renderTournamentsView() {
 
   const activeTourn = tournaments.find(t => t.id === selectedTournamentId) || tournaments[0];
   const standings = computeTournamentStandings(activeTourn, teamsMap, allMatches);
+  const caps = computeTournamentPlayerCaps(activeTourn, teamsMap, allMatches);
   const completedCount = (activeTourn.fixtures || []).filter(f => f.status === 'Completed').length;
   const totalFixtures = (activeTourn.fixtures || []).length;
 
@@ -4678,83 +5073,15 @@ async function renderTournamentsView() {
       </div>
     </div>
 
-    <!-- Live Points Table & NRR -->
-    <div class="section-title-row">
-      <h2>📊 Points Table &amp; NRR</h2>
-      <span class="muted" style="font-size:11px;">Win = 2 pts · Tie = 1 pt</span>
-    </div>
-    <div class="card" style="padding:10px; margin-bottom:16px; overflow-x:auto;">
-      <table class="crease-table">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Team</th>
-            <th>M</th>
-            <th>W</th>
-            <th>L</th>
-            <th>NRR</th>
-            <th>PTS</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${standings.map((row, idx) => `
-            <tr>
-              <td><strong>${idx + 1}</strong></td>
-              <td><strong>${escapeHTML(row.teamName)}</strong></td>
-              <td>${row.played}</td>
-              <td>${row.won}</td>
-              <td>${row.lost}</td>
-              <td style="font-weight:700; color:${row.nrr >= 0 ? 'var(--primary)' : 'var(--danger)'};">${row.nrr >= 0 ? '+' : ''}${row.nrr.toFixed(3)}</td>
-              <td><strong style="color:var(--primary); font-size:13px;">${row.points}</strong></td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
+    <!-- Sub-Tabs: Standings / Orange Cap / Purple Cap / MVP -->
+    <div class="tourn-subtabs-grid">
+      <button type="button" class="tourn-subtab-btn ${activeTournamentSubTab === 'standings' ? 'active' : ''}" onclick="switchTournamentSubTab('standings')">📊 Standings</button>
+      <button type="button" class="tourn-subtab-btn ${activeTournamentSubTab === 'orange' ? 'active' : ''}" onclick="switchTournamentSubTab('orange')">🧢 Orange Cap</button>
+      <button type="button" class="tourn-subtab-btn ${activeTournamentSubTab === 'purple' ? 'active' : ''}" onclick="switchTournamentSubTab('purple')">🟣 Purple Cap</button>
+      <button type="button" class="tourn-subtab-btn ${activeTournamentSubTab === 'mvp' ? 'active' : ''}" onclick="switchTournamentSubTab('mvp')">🌟 MVP</button>
     </div>
 
-    <!-- Match Schedule & Fixtures -->
-    <div class="section-title-row">
-      <h2>🗓️ Match Schedule (${totalFixtures})</h2>
-      <button type="button" class="link-btn" onclick="openAddFixtureModal('${activeTourn.id}')">＋ Add Fixture</button>
-    </div>
-
-    <div>
-      ${(activeTourn.fixtures || []).map(fx => {
-        const nameA = teamsMap[fx.teamAId] || 'Team A';
-        const nameB = teamsMap[fx.teamBId] || 'Team B';
-        const linkedMatch = fx.matchId ? allMatches.find(m => m.id === fx.matchId) : null;
-        const effectiveStatus = linkedMatch ? linkedMatch.status : fx.status;
-        const statusCls = effectiveStatus === 'Completed' ? 'completed' : effectiveStatus === 'Live' ? 'live' : 'scheduled';
-
-        return `
-          <div class="tourn-fixture-card">
-            <div class="tourn-fixture-top">
-              <span>MATCH #${fx.matchNumber} · ${escapeHTML(fx.roundLabel || 'League')}</span>
-              <span class="tourn-status-badge ${statusCls}">${escapeHTML(effectiveStatus)}</span>
-            </div>
-            <div class="tourn-fixture-teams">
-              <span>${escapeHTML(nameA)}</span>
-              <span class="tourn-vs-pill">VS</span>
-              <span>${escapeHTML(nameB)}</span>
-            </div>
-            ${(linkedMatch?.result || fx.result) ? `
-              <div style="margin-top:6px; font-size:11.5px; font-weight:800; color:var(--primary);">
-                🏆 ${escapeHTML(linkedMatch?.result || fx.result)}
-              </div>
-            ` : ''}
-            <div style="margin-top:10px; display:flex; justify-content:flex-end; gap:8px;">
-              ${effectiveStatus === 'Completed' && linkedMatch ? `
-                <button type="button" class="btn btn-secondary" style="padding:6px 11px; font-size:11px;" onclick="viewMatchScorecardModal('${linkedMatch.id}')">📋 Scorecard</button>
-              ` : `
-                <button type="button" class="btn btn-primary" style="padding:6px 12px; font-size:11.5px;" onclick="launchTournamentFixture('${activeTourn.id}', '${fx.id}')">
-                  ${effectiveStatus === 'Live' ? '⚡ Resume Match' : '⚡ Score Match'}
-                </button>
-              `}
-            </div>
-          </div>
-        `;
-      }).join('')}
-    </div>
+    ${buildTournamentLeaderboardHTML(activeTournamentSubTab, standings, caps, activeTourn.fixtures || [], teamsMap, allMatches, true, activeTourn.id)}
   `;
 }
 
@@ -5213,6 +5540,7 @@ function updateCloudAuthUI() {
     }
   }
 
+  getCloudSyncQueue().then(q => updateSyncStatusPill(q.length)).catch(() => updateSyncStatusPill(0));
   const card = document.getElementById('settingsCloudAccountCard');
   if (card) {
     if (currentCloudUser) {
@@ -6125,6 +6453,13 @@ function exitPublicTournamentMode() {
   navigate('dashboard');
 }
 
+let publicTournamentSubTab = 'standings';
+
+function switchPublicTournamentSubTab(tab) {
+  publicTournamentSubTab = tab;
+  renderPublicTournamentHub();
+}
+
 async function renderPublicTournamentHub() {
   const container = document.getElementById('publicTournamentHubContainer');
   if (!container) return;
@@ -6138,7 +6473,6 @@ async function renderPublicTournamentHub() {
   let teamsMap = {};
   let cloudMatches = [];
 
-  // Try Supabase cloud first so spectators on any device see live updates
   if (sbClient && navigator.onLine) {
     try {
       const [{ data: tRow }, { data: mRows }] = await Promise.all([
@@ -6153,7 +6487,6 @@ async function renderPublicTournamentHub() {
     } catch (e) {}
   }
 
-  // Fallback to local IndexedDB if opened offline on scorer's own device
   if (!tournData && db) {
     const [localTourns, localTeams, localMatches] = await Promise.all([
       getAllTournaments(),
@@ -6171,11 +6504,12 @@ async function renderPublicTournamentHub() {
   }
 
   const standings = computeTournamentStandings(tournData, teamsMap, cloudMatches);
+  const caps = computeTournamentPlayerCaps(tournData, teamsMap, cloudMatches);
   const fixtures = tournData.fixtures || [];
 
   container.innerHTML = `
     <div class="spectator-banner" style="background:rgba(245,158,11,0.14); border-color:rgba(245,158,11,0.45);">
-      <span>🏆 PUBLIC TOURNAMENT HUB · Live Standings &amp; Fixtures</span>
+      <span>🏆 PUBLIC TOURNAMENT HUB · Live Standings &amp; Caps</span>
       <button type="button" class="pill-btn" style="padding:3px 9px; font-size:10.5px;" onclick="sharePublicTournamentLink('${tournData.id}')">📤 Share</button>
     </div>
 
@@ -6185,62 +6519,14 @@ async function renderPublicTournamentHub() {
       <p class="muted" style="font-size:12px; margin:0;">${(tournData.teamIds || []).length} Competing Teams · ${fixtures.length} Scheduled Matches</p>
     </div>
 
-    <div class="section-title-row">
-      <h2>📊 Live Points Table &amp; NRR</h2>
-      <span class="muted" style="font-size:11px;">Win = 2 pts</span>
-    </div>
-    <div class="card" style="padding:10px; margin-bottom:16px; overflow-x:auto;">
-      <table class="crease-table">
-        <thead>
-          <tr><th>#</th><th>Team</th><th>M</th><th>W</th><th>L</th><th>NRR</th><th>PTS</th></tr>
-        </thead>
-        <tbody>
-          ${standings.map((row, idx) => `
-            <tr>
-              <td><strong>${idx + 1}</strong></td>
-              <td><strong>${escapeHTML(row.teamName)}</strong></td>
-              <td>${row.played}</td>
-              <td>${row.won}</td>
-              <td>${row.lost}</td>
-              <td style="font-weight:700; color:${row.nrr >= 0 ? 'var(--primary)' : 'var(--danger)'};">${row.nrr >= 0 ? '+' : ''}${row.nrr.toFixed(3)}</td>
-              <td><strong style="color:var(--primary);">${row.points}</strong></td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
+    <div class="tourn-subtabs-grid">
+      <button type="button" class="tourn-subtab-btn ${publicTournamentSubTab === 'standings' ? 'active' : ''}" onclick="switchPublicTournamentSubTab('standings')">📊 Standings</button>
+      <button type="button" class="tourn-subtab-btn ${publicTournamentSubTab === 'orange' ? 'active' : ''}" onclick="switchPublicTournamentSubTab('orange')">🧢 Orange Cap</button>
+      <button type="button" class="tourn-subtab-btn ${publicTournamentSubTab === 'purple' ? 'active' : ''}" onclick="switchPublicTournamentSubTab('purple')">🟣 Purple Cap</button>
+      <button type="button" class="tourn-subtab-btn ${publicTournamentSubTab === 'mvp' ? 'active' : ''}" onclick="switchPublicTournamentSubTab('mvp')">🌟 MVP</button>
     </div>
 
-    <div class="section-title-row">
-      <h2>🗓️ Fixtures &amp; Live Scores</h2>
-    </div>
-    <div>
-      ${fixtures.map(fx => {
-        const nameA = teamsMap[fx.teamAId] || 'Team A';
-        const nameB = teamsMap[fx.teamBId] || 'Team B';
-        const linked = fx.matchId ? cloudMatches.find(m => m.id === fx.matchId) : null;
-        const st = linked?.status || fx.status;
-        const statusCls = st === 'Completed' ? 'completed' : st === 'Live' ? 'live' : 'scheduled';
-        return `
-          <div class="tourn-fixture-card">
-            <div class="tourn-fixture-top">
-              <span>MATCH #${fx.matchNumber} · ${escapeHTML(fx.roundLabel || 'League')}</span>
-              <span class="tourn-status-badge ${statusCls}">${escapeHTML(st)}</span>
-            </div>
-            <div class="tourn-fixture-teams">
-              <span>${escapeHTML(nameA)}</span>
-              <span class="tourn-vs-pill">VS</span>
-              <span>${escapeHTML(nameB)}</span>
-            </div>
-            ${(linked?.result || fx.result) ? `<div style="margin-top:6px; font-size:11.5px; font-weight:800; color:var(--primary);">🏆 ${escapeHTML(linked?.result || fx.result)}</div>` : ''}
-            ${fx.matchId ? `
-              <div style="margin-top:8px; display:flex; justify-content:flex-end;">
-                <button type="button" class="btn btn-primary" style="padding:5px 11px; font-size:11px;" onclick="openSpectatorLiveMatch('${fx.matchId}')">📺 Watch Scoreboard</button>
-              </div>
-            ` : ''}
-          </div>
-        `;
-      }).join('')}
-    </div>
+    ${buildTournamentLeaderboardHTML(publicTournamentSubTab, standings, caps, fixtures, teamsMap, cloudMatches, false, tournData.id)}
   `;
 
   if (sbClient && !publicTournamentRealtimeChannel) {
@@ -6257,3 +6543,206 @@ async function renderPublicTournamentHub() {
       .subscribe();
   }
 }
+
+
+// ==========================================
+// V2.30: INDEXEDDB CLOUD SYNC RETRY QUEUE & SPECTATOR PRESENCE / REACTIONS
+// ==========================================
+const CLOUD_SYNC_QUEUE_KEY = 'cricscorer_sync_queue_v1';
+let spectatorViewerCount = 1;
+
+async function getCloudSyncQueue() {
+  if (!db) return [];
+  try {
+    const item = await dbGet('settings', CLOUD_SYNC_QUEUE_KEY);
+    return Array.isArray(item?.val) ? item.val : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+async function setCloudSyncQueue(queue) {
+  if (!db) return;
+  try {
+    await dbPut('settings', { key: CLOUD_SYNC_QUEUE_KEY, val: queue });
+  } catch (e) {}
+  updateSyncStatusPill(queue.length);
+}
+
+async function enqueueCloudSyncItem(kind, payloadId) {
+  const q = await getCloudSyncQueue();
+  const exists = q.some(item => item.kind === kind && item.id === payloadId);
+  if (!exists) {
+    q.push({ kind, id: payloadId, queuedAt: Date.now() });
+    await setCloudSyncQueue(q);
+  } else {
+    updateSyncStatusPill(q.length);
+  }
+}
+
+async function flushCloudSyncQueue(silent = true) {
+  if (!sbClient || !currentCloudUser || !navigator.onLine || !db) {
+    const q = await getCloudSyncQueue();
+    updateSyncStatusPill(q.length);
+    return;
+  }
+
+  const q = await getCloudSyncQueue();
+  if (!q.length) {
+    updateSyncStatusPill(0);
+    return;
+  }
+
+  const [matches, tourns] = await Promise.all([dbGetAll('matches'), getAllTournaments()]);
+  const remaining = [];
+
+  for (const item of q) {
+    try {
+      if (item.kind === 'match') {
+        const mObj = matches.find(m => m.id === item.id);
+        if (mObj) await pushSingleMatchToCloud(mObj);
+      } else if (item.kind === 'tournaments') {
+        await queueCloudTournamentsSync(tourns);
+      }
+    } catch (e) {
+      remaining.push(item);
+    }
+  }
+
+  await setCloudSyncQueue(remaining);
+  if (!silent && remaining.length === 0) {
+    showToast('All queued offline updates synced to cloud!');
+  }
+}
+
+function updateSyncStatusPill(queuedCount = 0) {
+  const pill = document.getElementById('syncStatusPill');
+  if (!pill) return;
+
+  pill.classList.remove('synced', 'queued', 'offline');
+  if (!currentCloudUser) {
+    pill.classList.add('offline');
+    pill.textContent = '⚪ Local';
+    return;
+  }
+  if (!navigator.onLine) {
+    pill.classList.add('queued');
+    pill.textContent = queuedCount > 0 ? `🟡 Offline (${queuedCount})` : '🟡 Offline';
+    return;
+  }
+  if (queuedCount > 0) {
+    pill.classList.add('queued');
+    pill.textContent = `🟡 ${queuedCount} Queued`;
+  } else {
+    pill.classList.add('synced');
+    pill.textContent = '🟢 Synced';
+  }
+}
+
+function handleSyncStatusPillClick() {
+  if (!currentCloudUser) {
+    openCloudAuthModal();
+    return;
+  }
+  if (!navigator.onLine) {
+    showToast('Offline at ground — your scores are safely saved in IndexedDB and will auto-sync once back online.');
+    return;
+  }
+  flushCloudSyncQueue(false);
+  syncAllLocalDataToCloud(false);
+}
+
+// Wrap queueCloudMatchSync so offline updates are always persisted in IndexedDB queue
+const _origQueueCloudMatchSync = queueCloudMatchSync;
+queueCloudMatchSync = function(matchObj) {
+  if (matchObj && matchObj.id) {
+    enqueueCloudSyncItem('match', matchObj.id);
+  }
+  if (!sbClient || !currentCloudUser || !navigator.onLine || !matchObj) return;
+  clearTimeout(cloudSyncDebounceTimer);
+  cloudSyncDebounceTimer = setTimeout(async () => {
+    await pushSingleMatchToCloud(matchObj);
+    const q = await getCloudSyncQueue();
+    const filtered = q.filter(item => !(item.kind === 'match' && item.id === matchObj.id));
+    await setCloudSyncQueue(filtered);
+  }, 1200);
+};
+
+window.addEventListener('online', () => {
+  flushCloudSyncQueue(true);
+});
+
+window.addEventListener('offline', async () => {
+  const q = await getCloudSyncQueue();
+  updateSyncStatusPill(q.length);
+});
+
+// Spectator Presence & Live Floating Reactions
+function spawnFloatingCheer(emoji) {
+  let stage = document.getElementById('floatingCheerStage');
+  if (!stage) {
+    stage = document.createElement('div');
+    stage.id = 'floatingCheerStage';
+    stage.className = 'floating-cheer-stage';
+    document.body.appendChild(stage);
+  }
+  const el = document.createElement('div');
+  el.className = 'floating-cheer-bubble';
+  el.textContent = emoji;
+  stage.appendChild(el);
+  setTimeout(() => el.remove(), 1850);
+}
+
+function sendSpectatorCheer(emoji) {
+  spawnFloatingCheer(emoji);
+  if (spectatorRealtimeChannel) {
+    spectatorRealtimeChannel.send({
+      type: 'broadcast',
+      event: 'cheer',
+      payload: { emoji, ts: Date.now() }
+    }).catch(() => {});
+  }
+}
+
+// Enhance Spectator View with Presence tracking & Broadcast Emoji Cheers
+const _origRenderSpectatorView = renderSpectatorView;
+renderSpectatorView = async function() {
+  await _origRenderSpectatorView();
+  if (spectatorRealtimeChannel && spectatorWatchMatchId) {
+    const presenceKey = 'fan-' + Math.random().toString(36).slice(2, 9);
+    spectatorRealtimeChannel
+      .on('presence', { event: 'sync' }, () => {
+        const state = spectatorRealtimeChannel.presenceState();
+        spectatorViewerCount = Math.max(1, Object.keys(state).length);
+        const countEl = document.getElementById('spectatorLiveViewerCount');
+        if (countEl) countEl.textContent = `👁️ ${spectatorViewerCount} watching live`;
+      })
+      .on('broadcast', { event: 'cheer' }, ({ payload }) => {
+        if (payload?.emoji) spawnFloatingCheer(payload.emoji);
+      });
+
+    spectatorRealtimeChannel.track({
+      user: presenceKey,
+      online_at: new Date().toISOString()
+    }).catch(() => {});
+  }
+};
+
+const _origPaintSpectatorScoreboard = paintSpectatorScoreboard;
+paintSpectatorScoreboard = function(row) {
+  _origPaintSpectatorScoreboard(row);
+  const container = document.getElementById('spectatorLiveContainer');
+  if (!container || !row) return;
+  const presenceBarHTML = `
+    <div class="spectator-presence-row">
+      <span id="spectatorLiveViewerCount">👁️ ${spectatorViewerCount} watching live</span>
+      <div class="spectator-reaction-bar">
+        <button type="button" class="reaction-chip-btn" onclick="sendSpectatorCheer('👏')" title="Applaud">👏</button>
+        <button type="button" class="reaction-chip-btn" onclick="sendSpectatorCheer('🔥')" title="Fire">🔥</button>
+        <button type="button" class="reaction-chip-btn" onclick="sendSpectatorCheer('🏏')" title="Shot!">🏏</button>
+        <button type="button" class="reaction-chip-btn" onclick="sendSpectatorCheer('💯')" title="Century Cheer">💯</button>
+      </div>
+    </div>
+  `;
+  container.insertAdjacentHTML('afterbegin', presenceBarHTML);
+};

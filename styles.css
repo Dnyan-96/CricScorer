@@ -3573,3 +3573,182 @@ body[data-theme="light"] .pmc-live-badge {
   background: var(--primary-glow);
   color: var(--primary);
 }
+
+
+/* ==========================================
+   V2.30 TOURNAMENT CAPS, KNOCKOUT SEEDING, SYNC PILL & SPECTATOR REACTIONS
+   ========================================== */
+
+.sync-status-pill {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 5px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.sync-status-pill.synced {
+  border-color: rgba(16, 185, 129, 0.45);
+  background: rgba(16, 185, 129, 0.14);
+  color: #34d399;
+}
+
+.sync-status-pill.queued {
+  border-color: rgba(245, 158, 11, 0.55);
+  background: rgba(245, 158, 11, 0.16);
+  color: #fbbf24;
+}
+
+body[data-theme="light"] .sync-status-pill.synced {
+  background: #dcfce7;
+  color: #15803d;
+  border-color: #16a34a;
+}
+
+body[data-theme="light"] .sync-status-pill.queued {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #f59e0b;
+}
+
+.tourn-subtabs-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.tourn-subtab-btn {
+  padding: 8px 4px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.tourn-subtab-btn.active {
+  border-color: var(--primary);
+  background: var(--primary-glow);
+  color: var(--primary);
+}
+
+.cap-spotlight-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 15px;
+  border-radius: 14px;
+  margin-bottom: 12px;
+}
+
+.cap-spotlight-card.orange-cap {
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.2), rgba(245, 158, 11, 0.12));
+  border: 1px solid rgba(249, 115, 22, 0.5);
+}
+
+.cap-spotlight-card.purple-cap {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.22), rgba(99, 102, 241, 0.12));
+  border: 1px solid rgba(168, 85, 247, 0.5);
+}
+
+.cap-spotlight-card.mvp-cap {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(56, 189, 248, 0.12));
+  border: 1px solid rgba(16, 185, 129, 0.5);
+}
+
+body[data-theme="light"] .cap-spotlight-card.orange-cap {
+  background: linear-gradient(135deg, #ffedd5, #fef3c7);
+  border-color: #f97316;
+}
+
+body[data-theme="light"] .cap-spotlight-card.purple-cap {
+  background: linear-gradient(135deg, #f3e8ff, #e0e7ff);
+  border-color: #9333ea;
+}
+
+body[data-theme="light"] .cap-spotlight-card.mvp-cap {
+  background: linear-gradient(135deg, #d1fae5, #e0f2fe);
+  border-color: #059669;
+}
+
+.knockout-action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 11px 13px;
+  border-radius: 12px;
+  margin-bottom: 12px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px dashed rgba(245, 158, 11, 0.5);
+}
+
+/* Spectator Live Presence & Emoji Reactions */
+.spectator-presence-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  margin-bottom: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  font-size: 11.5px;
+  font-weight: 800;
+}
+
+.spectator-reaction-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.reaction-chip-btn {
+  padding: 5px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--primary-glow);
+  font-size: 14px;
+  cursor: pointer;
+  transition: transform 0.14s ease;
+}
+
+.reaction-chip-btn:active {
+  transform: scale(1.25);
+}
+
+.floating-cheer-stage {
+  position: fixed;
+  right: 18px;
+  bottom: 84px;
+  z-index: 9985;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: 4px;
+}
+
+.floating-cheer-bubble {
+  font-size: 26px;
+  animation: cheerFloatUp 1.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  filter: drop-shadow(0 4px 10px rgba(0,0,0,0.35));
+}
+
+@keyframes cheerFloatUp {
+  0% { opacity: 0; transform: translateY(16px) scale(0.7); }
+  20% { opacity: 1; transform: translateY(0) scale(1.12); }
+  100% { opacity: 0; transform: translateY(-110px) scale(0.95); }
+}
