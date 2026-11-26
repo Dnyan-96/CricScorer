@@ -1922,7 +1922,9 @@ let isBroadcastFxPlaying = false;
 function syncFxToggleBtn() {
   const btn = document.getElementById('fxToggleBtn');
   if (!btn) return;
-  btn.textContent = broadcastFxEnabled ? '✨ FX: ON' : '✨ FX: OFF';
+  btn.innerHTML = broadcastFxEnabled
+    ? '✨ FX<span class="fx-btn-detail">: ON</span>'
+    : '✨ FX<span class="fx-btn-detail">: OFF</span>';
   btn.classList.toggle('active', broadcastFxEnabled);
 }
 
