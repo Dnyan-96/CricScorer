@@ -356,6 +356,21 @@
             </div>
 
             <div class="form-group">
+              <label>Ground &amp; Pitch Conditions</label>
+              <select id="cmPitchCondition">
+                <option value="Flat Batting Track">🏏 Flat Batting Track</option>
+                <option value="Dew Factor (Evening)">💧 Dew Factor (Evening)</option>
+                <option value="Green Top / Seam">🌿 Green Top / Seam</option>
+                <option value="Slow / Spin Track">🌀 Slow / Spin Track</option>
+                <option value="Turf / Box Arena">🏟️ Turf / Box Arena</option>
+              </select>
+            </div>
+
+            <div class="form-group" style="display:flex; align-items:flex-end;">
+              <button type="button" class="btn btn-secondary" style="width:100%; border-color:rgba(245,158,11,0.5);" onclick="openVirtualCoinTossModal()">🪙 Flip 3D Coin Toss</button>
+            </div>
+
+            <div class="form-group">
               <label>Match Date</label>
               <input type="date" id="cmDate" required>
             </div>
@@ -426,7 +441,10 @@
           <p class="eyebrow">ROSTER DIRECTORY</p>
           <h1>Teams</h1>
         </div>
-        <button class="btn btn-primary" onclick="openTeamModal()">＋ Add Team</button>
+        <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
+          <button class="btn btn-secondary" onclick="navigate('rsvp-hub')">📋 RSVP &amp; XI</button>
+          <button class="btn btn-primary" onclick="openTeamModal()">＋ Add Team</button>
+        </div>
       </div>
       <div id="teamsContainer" class="stack-list empty-state">No teams found. Create your first team.</div>
     </section>
@@ -781,6 +799,20 @@
         <div class="obs-score-bug">Waiting for live stream data...</div>
       </div>
     </section>
+
+    <!-- VIEW 12: MATCH-DAY PLAYER RSVP & PLAYING XI GENERATOR (#rsvp-hub / #rsvp=<id>) -->
+    <section id="rsvp-hub" class="page">
+      <div class="page-header">
+        <div>
+          <p class="eyebrow">SQUAD AVAILABILITY &amp; LINEUP</p>
+          <h1>Match-Day RSVP &amp; XI</h1>
+        </div>
+        <button class="btn btn-secondary" onclick="navigate('dashboard')">← Home</button>
+      </div>
+      <div id="rsvpHubContainer">
+        <div class="empty-state">Loading squad RSVP &amp; Playing XI builder...</div>
+      </div>
+    </section>
   </main>
 
   <!-- Bottom Mobile Navigation Bar -->
@@ -846,6 +878,11 @@
         <span class="more-tile-icon">⚙️</span>
         <span class="more-tile-title">Settings</span>
         <span class="more-tile-sub">Theme &amp; backups</span>
+      </button>
+      <button type="button" class="more-tile-btn" data-more-nav="rsvp-hub" onclick="navigateFromMoreSheet('rsvp-hub')">
+        <span class="more-tile-icon">📋</span>
+        <span class="more-tile-title">RSVP &amp; XI</span>
+        <span class="more-tile-sub">Lineup &amp; attendance</span>
       </button>
       <button type="button" class="more-tile-btn" onclick="closeMoreNavSheet(); handleCloudAuthHeaderClick();">
         <span class="more-tile-icon">☁️</span>

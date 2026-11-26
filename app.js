@@ -441,7 +441,7 @@ class CricketEngine {
 // 3. NAVIGATION & VIEW CONTROLLER (9 SECTIONS)
 // ==========================================
 
-const VALID_TABS = ['dashboard', 'tournaments', 'live-scorer', 'create-match', 'teams', 'players', 'history', 'statistics', 'settings', 'scorecard', 'watch-live', 'watch-tournament', 'broadcast-overlay'];
+const VALID_TABS = ['dashboard', 'tournaments', 'live-scorer', 'create-match', 'teams', 'players', 'history', 'statistics', 'settings', 'scorecard', 'watch-live', 'watch-tournament', 'broadcast-overlay', 'rsvp-hub'];
 
 function persistActiveTab(tabId) {
   if (!VALID_TABS.includes(tabId)) return;
@@ -467,6 +467,10 @@ function getSavedActiveTab() {
     if (rawHash.startsWith('overlay=')) {
       obsOverlayMatchId = decodeURIComponent(rawHash.slice(8));
       return 'broadcast-overlay';
+    }
+    if (rawHash.startsWith('rsvp=')) {
+      rsvpSelectedTeamId = decodeURIComponent(rawHash.slice(5));
+      return 'rsvp-hub';
     }
     if (VALID_TABS.includes(rawHash)) return rawHash;
     const storedTab = sessionStorage.getItem('cricscorer_active_tab');
@@ -540,6 +544,7 @@ function navigate(tabId, options = {}) {
   if (targetTab === 'watch-live') renderSpectatorView();
   if (targetTab === 'watch-tournament') renderPublicTournamentHub();
   if (targetTab === 'broadcast-overlay') renderBroadcastOverlayView();
+  if (targetTab === 'rsvp-hub') renderRsvpHubView();
   document.body.classList.toggle('obs-overlay-mode', targetTab === 'broadcast-overlay');
   if (targetTab === 'live-scorer') renderLiveScorerView();
   if (targetTab === 'create-match') renderCreateMatchView();
@@ -1420,6 +1425,7 @@ async function handleCreateMatchSubmit(event) {
     venue: document.getElementById('cmVenue').value || 'Ground',
     tossWinner,
     tossDecision,
+    pitchCondition: document.getElementById('cmPitchCondition')?.value || 'Flat Batting Track',
     status: 'Live',
     innings: [initialInnings],
     created: new Date().toISOString()
@@ -1899,6 +1905,7 @@ async function renderLiveScorerView() {
         <span>${phaseLabel}</span>
         <span style="font-size:10px; font-weight:800; color:var(--primary); background:var(--primary-glow); border:1px solid var(--primary); padding:2px 7px; border-radius:20px;">Extras: ${stats.extras.total || 0} (wd ${stats.extras.wide || 0}, nb ${stats.extras.noBall || 0}, b ${stats.extras.bye || 0}, lb ${stats.extras.legBye || 0}${(stats.extras.penalty || 0) > 0 ? `, pen ${stats.extras.penalty}` : ''})</span>
       </div>
+      ${buildMatchTossPitchStripHTML(activeMatch, teams)}
       ${chaseBarHTML}
       ${winProbHTML}
     </div>
@@ -7978,4 +7985,334 @@ async function generatePlayerCareerPosterModal(playerId) {
     </div>
   `;
   openModal(`🪪 ${player.name} — Career Stats Card`, html, null, false);
+}
+
+
+// ==========================================
+// V2.37: PRE-MATCH 3D COIN TOSS, PITCH CONDITIONS & PLAYER RSVP / PLAYING XI
+// ==========================================
+let lastCoinTossResult = 'HEADS';
+
+function buildMatchTossPitchStripHTML(matchObj, teamsList) {
+  if (!matchObj) return '';
+  const tossTeam = teamsList.find(t => t.id === matchObj.tossWinner)?.name || '';
+  const decisionTxt = matchObj.tossDecision === 'bowl' ? 'Bowl First' : 'Bat First';
+  const pitchTxt = matchObj.pitchCondition || 'Flat Batting Track';
+  if (!tossTeam && !matchObj.pitchCondition) return '';
+  return `
+    <div class="toss-pitch-strip">
+      <span>${tossTeam ? `🪙 <strong>${escapeHTML(tossTeam)}</strong> won toss &amp; elected to <strong>${decisionTxt}</strong>` : '🪙 Pre-Match Conditions'}</span>
+      <span style="color:#fbbf24;">🏟️ ${escapeHTML(pitchTxt)}</span>
+    </div>
+  `;
+}
+
+async function openVirtualCoinTossModal() {
+  const teams = await dbGetAll('teams');
+  const teamAId = document.getElementById('cmTeamA')?.value;
+  const teamBId = document.getElementById('cmTeamB')?.value;
+  const teamAName = teams.find(t => t.id === teamAId)?.name || 'Team A';
+  const teamBName = teams.find(t => t.id === teamBId)?.name || 'Team B';
+
+  const html = `
+    <div class="coin-toss-stage">
+      <div id="virtualCoinDisc" class="coin-3d-disc" onclick="spinVirtualCoinDisc()" title="Tap to flip coin">
+        <span style="font-size:26px; line-height:1;">🪙</span>
+        <span id="virtualCoinFaceText" style="font-size:14px; letter-spacing:1px; margin-top:4px;">${lastCoinTossResult}</span>
+      </div>
+      <button type="button" class="btn btn-primary" onclick="spinVirtualCoinDisc()">🪙 Flip Coin Now</button>
+
+      <div class="field-grid" style="width:100%; margin-top:4px;">
+        <div class="form-group">
+          <label>Toss Won By</label>
+          <select id="modalTossWinnerSel">
+            <option value="${teamAId}">${escapeHTML(teamAName)}</option>
+            <option value="${teamBId}">${escapeHTML(teamBName)}</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Elected To</label>
+          <select id="modalTossDecisionSel">
+            <option value="bat">Bat First</option>
+            <option value="bowl">Bowl First</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  `;
+
+  openModal('🪙 Pre-Match 3D Coin Toss', html, async () => {
+    const winId = document.getElementById('modalTossWinnerSel')?.value;
+    const dec = document.getElementById('modalTossDecisionSel')?.value || 'bat';
+    const mainWinSel = document.getElementById('cmTossWinner');
+    const mainDecSel = document.getElementById('cmTossDecision');
+    if (mainWinSel && winId) mainWinSel.value = winId;
+    if (mainDecSel) mainDecSel.value = dec;
+    const winName = winId === teamAId ? teamAName : teamBName;
+    showToast(`🪙 ${winName} won the toss & elected to ${dec === 'bat' ? 'Bat' : 'Bowl'} First!`);
+    return true;
+  });
+}
+
+function spinVirtualCoinDisc() {
+  const disc = document.getElementById('virtualCoinDisc');
+  const txt = document.getElementById('virtualCoinFaceText');
+  if (!disc || !txt) return;
+  disc.classList.remove('flipping');
+  void disc.offsetWidth;
+  disc.classList.add('flipping');
+  txt.textContent = '...';
+  setTimeout(() => {
+    lastCoinTossResult = Math.random() < 0.5 ? 'HEADS' : 'TAILS';
+    txt.textContent = lastCoinTossResult;
+  }, 560);
+}
+
+// ==========================================
+// PLAYER AVAILABILITY RSVP & WHATSAPP PLAYING XI GENERATOR
+// ==========================================
+const RSVP_STORAGE_KEY = 'cricscorer_rsvp_state_v1';
+let rsvpSelectedTeamId = null;
+
+function loadRsvpState() {
+  try {
+    const raw = localStorage.getItem(RSVP_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveRsvpState(stateObj) {
+  try {
+    localStorage.setItem(RSVP_STORAGE_KEY, JSON.stringify(stateObj));
+  } catch (e) {}
+}
+
+async function renderRsvpHubView() {
+  const container = document.getElementById('rsvpHubContainer');
+  if (!container) return;
+
+  const [teams, players] = await Promise.all([dbGetAll('teams'), dbGetAll('players')]);
+  if (!teams.length) {
+    container.innerHTML = `<div class="empty-state">Create a team first to manage match-day RSVP and Playing XI lineups.</div>`;
+    return;
+  }
+
+  if (!rsvpSelectedTeamId || !teams.some(t => t.id === rsvpSelectedTeamId)) {
+    rsvpSelectedTeamId = teams[0].id;
+  }
+
+  const activeTeam = teams.find(t => t.id === rsvpSelectedTeamId) || teams[0];
+  const rsvpState = loadRsvpState();
+  const teamRsvp = rsvpState[activeTeam.id] || { statuses: {}, captainId: null, wkId: null, matchLabel: 'Weekend Match' };
+
+  const roster = players
+    .filter(p => !activeTeam.playerIds?.length || activeTeam.playerIds.includes(p.id))
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
+
+  const getStatus = (pid) => teamRsvp.statuses?.[pid] || 'in';
+  const inCount = roster.filter(p => getStatus(p.id) === 'in').length;
+  const maybeCount = roster.filter(p => getStatus(p.id) === 'maybe').length;
+  const outCount = roster.filter(p => getStatus(p.id) === 'out').length;
+
+  container.innerHTML = `
+    <div class="tourn-selector-strip">
+      ${teams.map(t => `
+        <button type="button" class="tourn-pill-tab ${t.id === activeTeam.id ? 'active' : ''}" onclick="selectRsvpTeam('${t.id}')">
+          🛡️ ${escapeHTML(t.name)}
+        </button>
+      `).join('')}
+    </div>
+
+    <div class="card" style="margin-bottom:12px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+        <div>
+          <div class="eyebrow" style="margin-bottom:2px;">MATCH-DAY ATTENDANCE</div>
+          <h3 style="margin:0; font-size:16px; font-weight:950;">${escapeHTML(activeTeam.name)}</h3>
+        </div>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <button type="button" class="btn btn-secondary" style="padding:6px 10px; font-size:11px;" onclick="shareRsvpInviteLink('${activeTeam.id}')">📤 RSVP Link</button>
+          <button type="button" class="btn btn-secondary" style="padding:6px 10px; font-size:11px;" onclick="copyWhatsAppPlayingXI('${activeTeam.id}')">💬 Copy XI</button>
+          <button type="button" class="btn btn-primary" style="padding:6px 10px; font-size:11px;" onclick="generatePlayingXiPosterModal('${activeTeam.id}')">🪪 XI Card</button>
+        </div>
+      </div>
+
+      <div class="rsvp-summary-bar">
+        <div class="rsvp-stat-box"><strong style="color:#34d399; font-size:18px;">${inCount}</strong><div class="muted" style="font-size:10px; font-weight:800;">CONFIRMED IN</div></div>
+        <div class="rsvp-stat-box"><strong style="color:#fbbf24; font-size:18px;">${maybeCount}</strong><div class="muted" style="font-size:10px; font-weight:800;">MAYBE</div></div>
+        <div class="rsvp-stat-box"><strong style="color:#f87171; font-size:18px;">${outCount}</strong><div class="muted" style="font-size:10px; font-weight:800;">OUT</div></div>
+      </div>
+
+      <div>
+        ${roster.map(p => {
+          const st = getStatus(p.id);
+          const isCap = teamRsvp.captainId === p.id;
+          const isWk = teamRsvp.wkId === p.id;
+          return `
+            <div class="rsvp-player-row">
+              <div style="min-width:0;">
+                <div style="font-size:13px; font-weight:850;">
+                  ${escapeHTML(p.name)}
+                  ${isCap ? '<span style="color:var(--primary); font-size:11px;">(C)</span>' : ''}
+                  ${isWk ? '<span style="color:#38bdf8; font-size:11px;">(WK)</span>' : ''}
+                </div>
+                <div style="display:flex; align-items:center; gap:5px; margin-top:3px;">
+                  <span class="muted" style="font-size:10.5px;">${escapeHTML(p.role || 'Batter')}</span>
+                  <button type="button" class="role-tag-chip ${isCap ? 'active' : ''}" onclick="toggleRsvpCaptain('${activeTeam.id}', '${p.id}')">C</button>
+                  <button type="button" class="role-tag-chip ${isWk ? 'active' : ''}" onclick="toggleRsvpKeeper('${activeTeam.id}', '${p.id}')">WK</button>
+                </div>
+              </div>
+              <div class="rsvp-status-pills">
+                <button type="button" class="rsvp-pill in ${st === 'in' ? 'active' : ''}" onclick="setPlayerRsvpStatus('${activeTeam.id}', '${p.id}', 'in')">IN</button>
+                <button type="button" class="rsvp-pill maybe ${st === 'maybe' ? 'active' : ''}" onclick="setPlayerRsvpStatus('${activeTeam.id}', '${p.id}', 'maybe')">MAYBE</button>
+                <button type="button" class="rsvp-pill out ${st === 'out' ? 'active' : ''}" onclick="setPlayerRsvpStatus('${activeTeam.id}', '${p.id}', 'out')">OUT</button>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function selectRsvpTeam(teamId) {
+  rsvpSelectedTeamId = teamId;
+  renderRsvpHubView();
+}
+
+function setPlayerRsvpStatus(teamId, playerId, status) {
+  const all = loadRsvpState();
+  if (!all[teamId]) all[teamId] = { statuses: {}, captainId: null, wkId: null };
+  all[teamId].statuses[playerId] = status;
+  saveRsvpState(all);
+  renderRsvpHubView();
+}
+
+function toggleRsvpCaptain(teamId, playerId) {
+  const all = loadRsvpState();
+  if (!all[teamId]) all[teamId] = { statuses: {}, captainId: null, wkId: null };
+  all[teamId].captainId = all[teamId].captainId === playerId ? null : playerId;
+  saveRsvpState(all);
+  renderRsvpHubView();
+}
+
+function toggleRsvpKeeper(teamId, playerId) {
+  const all = loadRsvpState();
+  if (!all[teamId]) all[teamId] = { statuses: {}, captainId: null, wkId: null };
+  all[teamId].wkId = all[teamId].wkId === playerId ? null : playerId;
+  saveRsvpState(all);
+  renderRsvpHubView();
+}
+
+function shareRsvpInviteLink(teamId) {
+  const url = `${window.location.origin}${window.location.pathname}#rsvp=${encodeURIComponent(teamId)}`;
+  const msg = `🏏 Match-Day Attendance Check!
+Tap the link below to mark your availability (IN / MAYBE / OUT):
+${url}`;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(msg).then(() => showToast('📋 RSVP WhatsApp link copied!'));
+  } else {
+    prompt('Copy RSVP Invite Link:', url);
+  }
+}
+
+async function copyWhatsAppPlayingXI(teamId) {
+  const [teams, players] = await Promise.all([dbGetAll('teams'), dbGetAll('players')]);
+  const team = teams.find(t => t.id === teamId);
+  if (!team) return;
+  const teamRsvp = loadRsvpState()[teamId] || { statuses: {}, captainId: null, wkId: null };
+  const roster = players.filter(p => !team.playerIds?.length || team.playerIds.includes(p.id));
+  const confirmed = roster.filter(p => (teamRsvp.statuses?.[p.id] || 'in') === 'in').slice(0, 11);
+
+  const lines = confirmed.map((p, idx) => {
+    const badges = [];
+    if (teamRsvp.captainId === p.id) badges.push('C');
+    if (teamRsvp.wkId === p.id) badges.push('WK');
+    const tagStr = badges.length ? ` (${badges.join(', ')})` : '';
+    return `${idx + 1}. ${p.name}${tagStr}`;
+  });
+
+  const text = `🏏 *${team.name.toUpperCase()} — PLAYING XI*
+
+${lines.join('
+')}
+
+_Generated via CricScorer_`;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(() => showToast('💬 Formatted Playing XI copied for WhatsApp!'));
+  } else {
+    prompt('Copy Playing XI:', text);
+  }
+}
+
+async function generatePlayingXiPosterModal(teamId) {
+  const [teams, players] = await Promise.all([dbGetAll('teams'), dbGetAll('players')]);
+  const team = teams.find(t => t.id === teamId);
+  if (!team) return;
+  const teamRsvp = loadRsvpState()[teamId] || { statuses: {}, captainId: null, wkId: null };
+  const roster = players.filter(p => !team.playerIds?.length || team.playerIds.includes(p.id));
+  const confirmed = roster.filter(p => (teamRsvp.statuses?.[p.id] || 'in') === 'in').slice(0, 11);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 1080;
+  canvas.height = 1080;
+  const ctx = canvas.getContext('2d');
+
+  const grad = ctx.createLinearGradient(0, 0, 1080, 1080);
+  grad.addColorStop(0, '#04120d');
+  grad.addColorStop(0.55, '#0b2b20');
+  grad.addColorStop(1, '#04141c');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 1080, 1080);
+
+  ctx.strokeStyle = 'rgba(0, 230, 118, 0.45)';
+  ctx.lineWidth = 6;
+  ctx.strokeRect(36, 36, 1008, 1008);
+
+  ctx.fillStyle = '#00e676';
+  ctx.font = '900 28px system-ui, sans-serif';
+  ctx.fillText('OFFICIAL MATCH-DAY LINEUP', 84, 110);
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '900 64px system-ui, sans-serif';
+  ctx.fillText(team.name.toUpperCase().slice(0, 22), 84, 188);
+
+  confirmed.forEach((p, idx) => {
+    const y = 262 + idx * 64;
+    ctx.fillStyle = idx % 2 === 0 ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.03)';
+    ctx.fillRect(84, y - 38, 912, 52);
+
+    ctx.fillStyle = '#00e676';
+    ctx.font = '900 26px system-ui, sans-serif';
+    ctx.fillText(String(idx + 1).padStart(2, '0'), 108, y - 3);
+
+    const badges = [];
+    if (teamRsvp.captainId === p.id) badges.push('C');
+    if (teamRsvp.wkId === p.id) badges.push('WK');
+    const tagStr = badges.length ? `  [${badges.join(' / ')}]` : '';
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = '800 28px system-ui, sans-serif';
+    ctx.fillText(`${p.name}${tagStr}`, 172, y - 3);
+
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '700 22px system-ui, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(p.role || 'Batter', 972, y - 4);
+    ctx.textAlign = 'left';
+  });
+
+  ctx.fillStyle = '#64748b';
+  ctx.font = '700 24px system-ui, sans-serif';
+  ctx.fillText('Generated with CricScorer · Live Cricket & Tournament Hub', 84, 1005);
+
+  const dataUrl = canvas.toDataURL('image/png');
+  const html = `
+    <div style="text-align:center;">
+      <img src="${dataUrl}" alt="${escapeHTML(team.name)} Playing XI" style="width:100%; max-width:340px; border-radius:14px; border:1px solid var(--border); margin-bottom:10px;" />
+      <a href="${dataUrl}" download="${escapeHTML(team.name.replace(/\s+/g, '_'))}_Playing_XI.png" class="btn btn-primary" style="display:inline-block; text-decoration:none; width:100%;">⬇️ Download 1080×1080 Playing XI PNG</a>
+    </div>
+  `;
+  openModal(`🪪 ${team.name} — Playing XI Lineup Card`, html, null, false);
 }
