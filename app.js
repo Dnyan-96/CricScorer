@@ -8235,8 +8235,7 @@ async function copyWhatsAppPlayingXI(teamId) {
 
   const text = `🏏 *${team.name.toUpperCase()} — PLAYING XI*
 
-${lines.join('
-')}
+${lines.join('\n')}
 
 _Generated via CricScorer_`;
   if (navigator.clipboard) {
