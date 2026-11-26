@@ -438,7 +438,10 @@
           <p class="eyebrow">PLAYER REGISTRY</p>
           <h1>Players</h1>
         </div>
-        <button class="btn btn-primary" onclick="openPlayerModal()">＋ Add Player</button>
+        <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
+          <button class="btn btn-secondary" onclick="openDuplicatePlayerMergeModal()">🔀 Merge</button>
+          <button class="btn btn-primary" onclick="openPlayerModal()">＋ Add Player</button>
+        </div>
       </div>
       <div class="filter-bar">
         <input type="text" id="playerSearchInput" placeholder="Search player by name..." oninput="renderPlayers()">
@@ -769,6 +772,13 @@
       </div>
       <div id="publicTournamentHubContainer">
         <div class="empty-state">Loading tournament standings &amp; schedule...</div>
+      </div>
+    </section>
+
+    <!-- VIEW 11: TRANSPARENT YOUTUBE / OBS LIVE STREAM OVERLAY (#overlay=<matchId>) -->
+    <section id="broadcast-overlay" class="page">
+      <div id="obsOverlayStage" class="obs-overlay-stage">
+        <div class="obs-score-bug">Waiting for live stream data...</div>
       </div>
     </section>
   </main>

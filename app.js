@@ -441,7 +441,7 @@ class CricketEngine {
 // 3. NAVIGATION & VIEW CONTROLLER (9 SECTIONS)
 // ==========================================
 
-const VALID_TABS = ['dashboard', 'tournaments', 'live-scorer', 'create-match', 'teams', 'players', 'history', 'statistics', 'settings', 'scorecard', 'watch-live', 'watch-tournament'];
+const VALID_TABS = ['dashboard', 'tournaments', 'live-scorer', 'create-match', 'teams', 'players', 'history', 'statistics', 'settings', 'scorecard', 'watch-live', 'watch-tournament', 'broadcast-overlay'];
 
 function persistActiveTab(tabId) {
   if (!VALID_TABS.includes(tabId)) return;
@@ -463,6 +463,10 @@ function getSavedActiveTab() {
     if (rawHash.startsWith('tournament=')) {
       publicWatchTournamentId = decodeURIComponent(rawHash.slice(11));
       return 'watch-tournament';
+    }
+    if (rawHash.startsWith('overlay=')) {
+      obsOverlayMatchId = decodeURIComponent(rawHash.slice(8));
+      return 'broadcast-overlay';
     }
     if (VALID_TABS.includes(rawHash)) return rawHash;
     const storedTab = sessionStorage.getItem('cricscorer_active_tab');
@@ -535,6 +539,8 @@ function navigate(tabId, options = {}) {
   if (targetTab === 'tournaments') renderTournamentsView();
   if (targetTab === 'watch-live') renderSpectatorView();
   if (targetTab === 'watch-tournament') renderPublicTournamentHub();
+  if (targetTab === 'broadcast-overlay') renderBroadcastOverlayView();
+  document.body.classList.toggle('obs-overlay-mode', targetTab === 'broadcast-overlay');
   if (targetTab === 'live-scorer') renderLiveScorerView();
   if (targetTab === 'create-match') renderCreateMatchView();
   if (targetTab === 'teams') renderTeams();
@@ -879,8 +885,68 @@ async function deleteTeamPrompt(teamId) {
 // 6. PLAYERS MANAGEMENT MODULE (Independent Player Pool)
 // ==========================================
 
+async function computeAllPlayersCareerMap() {
+  const matches = await dbGetAll('matches');
+  const map = {};
+  const ensure = (id, name) => {
+    if (!map[id]) {
+      map[id] = { id, name: name || 'Player', matches: 0, runs: 0, balls: 0, fours: 0, sixes: 0, fifties: 0, hundreds: 0, highScore: 0, wickets: 0, legalBalls: 0, runsConceded: 0, bestW: 0, bestR: 999 };
+    }
+    return map[id];
+  };
+
+  matches.forEach(m => {
+    const matchSeen = new Set();
+    (m.innings || []).forEach(inn => {
+      const st = CricketEngine.calculateInnings(inn, inn.squad || [], inn.bowlingSquad || []);
+      (st.batters || []).forEach(b => {
+        if (b.balls > 0 || b.runs > 0 || b.isOut) {
+          const rec = ensure(b.id, b.name);
+          if (!matchSeen.has(b.id)) { rec.matches += 1; matchSeen.add(b.id); }
+          rec.runs += b.runs;
+          rec.balls += b.balls;
+          rec.fours += b.fours || 0;
+          rec.sixes += b.sixes || 0;
+          if (b.runs >= 100) rec.hundreds += 1;
+          else if (b.runs >= 50) rec.fifties += 1;
+          if (b.runs > rec.highScore) rec.highScore = b.runs;
+        }
+      });
+      (st.bowlers || []).forEach(bo => {
+        if (bo.legalBalls > 0 || bo.wickets > 0 || bo.wides > 0 || bo.noBalls > 0) {
+          const rec = ensure(bo.id, bo.name);
+          if (!matchSeen.has(bo.id)) { rec.matches += 1; matchSeen.add(bo.id); }
+          rec.wickets += bo.wickets;
+          rec.legalBalls += bo.legalBalls;
+          rec.runsConceded += bo.runsConceded;
+          if (bo.wickets > rec.bestW || (bo.wickets === rec.bestW && bo.runsConceded < rec.bestR)) {
+            rec.bestW = bo.wickets;
+            rec.bestR = bo.runsConceded;
+          }
+        }
+      });
+    });
+  });
+
+  return map;
+}
+
+function buildPlayerMilestoneBadgesHTML(c) {
+  if (!c) return '';
+  const badges = [];
+  if (c.runs >= 1000) badges.push('👑 1,000+ Runs Club');
+  else if (c.runs >= 500) badges.push('🔥 500+ Runs');
+  else if (c.runs >= 100) badges.push('🏏 100+ Runs');
+  if (c.hundreds >= 1) badges.push(`💯 ${c.hundreds}x 100s`);
+  if (c.wickets >= 50) badges.push('🟣 50+ Wickets');
+  else if (c.wickets >= 25) badges.push('⚡ 25+ Wickets');
+  else if (c.wickets >= 10) badges.push('🎯 10+ Wickets');
+  if (!badges.length) return '';
+  return `<div class="career-milestone-row">${badges.map(b => `<span class="career-badge-pill">${b}</span>`).join('')}</div>`;
+}
+
 async function renderPlayers() {
-  const players = await dbGetAll('players');
+  const [players, careerMap] = await Promise.all([dbGetAll('players'), computeAllPlayersCareerMap()]);
   const container = document.getElementById('playersContainer');
   const search = (document.getElementById('playerSearchInput')?.value || '').toLowerCase();
   const roleFilter = document.getElementById('playerRoleFilter')?.value || '';
@@ -891,7 +957,6 @@ async function renderPlayers() {
     return matchName && matchRole;
   });
 
-  // Sort players alphabetically A-Z
   filtered.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
 
   if (!filtered.length) {
@@ -901,18 +966,28 @@ async function renderPlayers() {
   }
 
   container.className = 'stack-list';
-  container.innerHTML = filtered.map(p => `
-    <div class="player-item">
-      <div class="item-info">
-        <h3>${escapeHTML(p.name)}</h3>
-        <p>Role: <strong>${escapeHTML(p.role || 'Batter')}</strong> · ${escapeHTML(p.battingStyle || 'Right-hand bat')}</p>
+  container.innerHTML = filtered.map(p => {
+    const c = careerMap[p.id];
+    const sr = c && c.balls > 0 ? ((c.runs / c.balls) * 100).toFixed(1) : '0.0';
+    const careerLine = c
+      ? `<p style="margin-top:3px; color:var(--primary); font-weight:700;">${c.matches} M · ${c.runs} Runs (HS ${c.highScore}, SR ${sr}) · ${c.wickets} Wkts</p>`
+      : '';
+    return `
+      <div class="player-item">
+        <div class="item-info">
+          <h3>${escapeHTML(p.name)}</h3>
+          <p>Role: <strong>${escapeHTML(p.role || 'Batter')}</strong> · ${escapeHTML(p.battingStyle || 'Right-hand bat')}</p>
+          ${careerLine}
+          ${buildPlayerMilestoneBadgesHTML(c)}
+        </div>
+        <div class="item-actions" style="flex-wrap:wrap; justify-content:flex-end;">
+          <button class="btn btn-primary" style="padding:6px 9px; font-size:11px;" onclick="generatePlayerCareerPosterModal('${p.id}')">🪪 Card</button>
+          <button class="btn btn-secondary" onclick="openPlayerModal('${p.id}')">Edit</button>
+          <button class="btn btn-outline" onclick="deletePlayerPrompt('${p.id}')">Remove</button>
+        </div>
       </div>
-      <div class="item-actions">
-        <button class="btn btn-secondary" onclick="openPlayerModal('${p.id}')">Edit</button>
-        <button class="btn btn-outline" onclick="deletePlayerPrompt('${p.id}')">Remove</button>
-      </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 }
 
 async function openPlayerModal(playerId = null) {
@@ -1828,13 +1903,24 @@ async function renderLiveScorerView() {
       ${winProbHTML}
     </div>
 
-    <!-- High-Contrast Match-Day Tools 3-Tile Control Bar -->
+    ${buildFreeHitBannerHTML(inn)}
+
+    <!-- High-Contrast Match-Day Tools 4-Tile Control Bar -->
     <div class="matchday-tools-card">
       <div class="mdt-header-row">
         <span class="mdt-header-title">🛠️ Match-Day Tools</span>
         <span class="muted" style="font-size:10px; font-weight:700;">Tap to configure</span>
       </div>
-      <div class="mdt-grid-3">
+      <div class="mdt-grid-4">
+        <button type="button" class="mdt-tile-btn wheel-tile ${getActiveCustomGroundRules().length ? 'active' : ''}" onclick="openCustomGroundRulesModal()">
+          <div class="mdt-tile-top">
+            <span class="mdt-tile-icon">⚡</span>
+            <span class="mdt-tile-badge">${getActiveCustomGroundRules().length} ON</span>
+          </div>
+          <span class="mdt-tile-title">Ground Rules</span>
+          <span class="mdt-tile-sub">Add / edit box rules</span>
+        </button>
+
         <button type="button" class="mdt-tile-btn pin-tile" onclick="openCoScorerPinModal()">
           <div class="mdt-tile-top">
             <span class="mdt-tile-icon">🔑</span>
@@ -2004,6 +2090,7 @@ async function renderLiveScorerView() {
 
     <!-- Scoring Touch Keypad -->
     <div class="card scoring-keypad-panel">
+      ${buildActiveRuleQuickTriggersHTML()}
       <div class="keypad-grid-numbers">
         <button class="key-touch" onclick="recordBallEvent(0)">0</button>
         <button class="key-touch" onclick="recordBallEvent(1)">1</button>
@@ -2928,7 +3015,9 @@ function checkInningsAutoCompletion(inn, stats) {
     return;
   }
 
-  if (stats.wickets >= maxWickets) {
+  const lastManActive = isLastManStandsEnabled();
+  const effectiveMaxWickets = lastManActive ? squadCount : maxWickets;
+  if (stats.wickets >= effectiveMaxWickets) {
     setTimeout(() => {
       if (confirm(`All Out (${stats.wickets} wickets)! Conclude this innings?`)) {
         endInningsPrompt(false, true);
@@ -6191,7 +6280,8 @@ function paintSpectatorScoreboard(row) {
   container.innerHTML = `
     <div class="spectator-banner">
       <span>🔴 LIVE BROADCAST</span>
-      <div style="display:flex; gap:6px;">
+      <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
+        <button type="button" class="pill-btn" style="padding:3px 9px; font-size:10.5px;" onclick="copyObsOverlayUrl('${row.id}')" title="Copy transparent YouTube/OBS Browser Source URL">📺 OBS Overlay</button>
         ${row.status === 'Live' ? `<button type="button" class="pill-btn" style="padding:3px 9px; font-size:10.5px;" onclick="openClaimCoScorerModal('${row.id}')">🔑 Co-Scorer PIN</button>` : ''}
         <button type="button" class="pill-btn" style="padding:3px 9px; font-size:10.5px;" onclick="shareLiveMatchLink('${row.id}')">📤 Share</button>
       </div>
@@ -7309,4 +7399,583 @@ function openAndroidApkGuideModal() {
     </div>
   `;
   openModal('📦 Free Android APK Packaging Guide ($0)', html, null, false);
+}
+
+
+// ==========================================
+// V2.36: CUSTOM GROUND RULES (ADD / EDIT / TOGGLE), FREE HIT, OBS OVERLAY & PLAYER CAREER
+// ==========================================
+const CUSTOM_RULES_STORAGE_KEY = 'cricscorer_custom_ground_rules_v1';
+
+const DEFAULT_CUSTOM_GROUND_RULES = [
+  {
+    id: 'rule_last_man',
+    name: 'Last Man Stands (1-Batter Rule)',
+    desc: '9th wicket down keeps last batter batting solo with strike retention.',
+    effectType: 'last_man',
+    runsDelta: 0,
+    enabled: false
+  },
+  {
+    id: 'rule_box_bonus',
+    name: 'Box Roof / Back-Wall Bonus',
+    desc: 'Award +2 bonus runs when ball hits designated box wall.',
+    effectType: 'add_runs',
+    runsDelta: 2,
+    enabled: false
+  },
+  {
+    id: 'rule_wicket_penalty',
+    name: 'Wicket Run Penalty (-3 Runs)',
+    desc: 'Deduct 3 runs from batting total whenever a wicket falls.',
+    effectType: 'wicket_penalty',
+    runsDelta: -3,
+    enabled: false
+  }
+];
+
+function loadCustomGroundRules() {
+  try {
+    const raw = localStorage.getItem(CUSTOM_RULES_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {}
+  return JSON.parse(JSON.stringify(DEFAULT_CUSTOM_GROUND_RULES));
+}
+
+function saveCustomGroundRules(rulesList) {
+  try {
+    localStorage.setItem(CUSTOM_RULES_STORAGE_KEY, JSON.stringify(rulesList));
+  } catch (e) {}
+}
+
+function getActiveCustomGroundRules() {
+  return loadCustomGroundRules().filter(r => !!r.enabled);
+}
+
+function isLastManStandsEnabled() {
+  return getActiveCustomGroundRules().some(r => r.effectType === 'last_man');
+}
+
+function buildFreeHitBannerHTML(inn) {
+  if (!inn || !Array.isArray(inn.balls) || !inn.balls.length) return '';
+  const lastBall = inn.balls[inn.balls.length - 1];
+  if (lastBall && lastBall.extraType === 'noBall') {
+    return `
+      <div class="free-hit-banner">
+        <span>🔥 FREE HIT ACTIVE — Next Delivery</span>
+        <span style="font-size:10px; opacity:0.92;">Run Out / Stumped Only</span>
+      </div>
+    `;
+  }
+  return '';
+}
+
+function buildActiveRuleQuickTriggersHTML() {
+  const activeRunRules = getActiveCustomGroundRules().filter(r => r.effectType === 'add_runs' || r.effectType === 'deduct_runs');
+  if (!activeRunRules.length) return '';
+  return `
+    <div class="active-rules-trigger-bar">
+      ${activeRunRules.map(r => {
+        const delta = Number(r.runsDelta) || 0;
+        const isPenalty = delta < 0 || r.effectType === 'deduct_runs';
+        const signed = delta >= 0 ? `+${delta}` : `${delta}`;
+        return `<button type="button" class="rule-quick-btn ${isPenalty ? 'penalty' : ''}" onclick="applyCustomGroundRuleAction('${r.id}')">⚡ ${escapeHTML(r.name)} (${signed})</button>`;
+      }).join('')}
+    </div>
+  `;
+}
+
+async function applyCustomGroundRuleAction(ruleId) {
+  if (!activeMatch) return;
+  const rule = loadCustomGroundRules().find(r => r.id === ruleId);
+  if (!rule) return;
+  const inn = activeMatch.innings[activeMatch.innings.length - 1];
+  const delta = Number(rule.runsDelta) || 0;
+
+  inn.balls.push({
+    id: generateId(),
+    batterId: inn.strikerId || null,
+    nonStrikerId: inn.nonStrikerId || null,
+    bowlerId: inn.bowlerId || null,
+    batRuns: 0,
+    extraType: 'penalty',
+    extraRuns: delta,
+    extraTotal: delta,
+    wicket: false,
+    dismissal: 'none',
+    customRuleLabel: rule.name,
+    timestamp: Date.now()
+  });
+
+  await saveActiveMatch();
+  showToast(`⚡ Applied "${rule.name}" (${delta >= 0 ? '+' : ''}${delta} runs)`);
+  renderLiveScorerView();
+}
+
+function openCustomGroundRulesModal() {
+  const rules = loadCustomGroundRules();
+  const effectLabels = {
+    last_man: 'Last Man Stands',
+    add_runs: 'Bonus Runs (+)',
+    deduct_runs: 'Penalty Runs (-)',
+    wicket_penalty: 'Wicket Penalty (-)',
+    note: 'Umpire Note'
+  };
+
+  const html = `
+    <div>
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
+        <p class="muted" style="font-size:11.5px; margin:0;">Toggle local gully/box rules ON or OFF, or create your own custom ground rules.</p>
+        <button type="button" class="btn btn-primary" style="padding:6px 10px; font-size:11px; white-space:nowrap;" onclick="openAddOrEditGroundRuleModal(null)">＋ Add Rule</button>
+      </div>
+
+      <div style="max-height:330px; overflow-y:auto;">
+        ${rules.map(r => {
+          const deltaBadge = (r.effectType === 'add_runs' || r.effectType === 'deduct_runs' || r.effectType === 'wicket_penalty')
+            ? ` (${Number(r.runsDelta) >= 0 ? '+' : ''}${r.runsDelta} runs)`
+            : '';
+          return `
+            <div class="custom-rule-row ${r.enabled ? 'enabled' : ''}">
+              <div style="min-width:0; flex:1;">
+                <div style="font-size:12.5px; font-weight:900;">${escapeHTML(r.name)}</div>
+                <div class="muted" style="font-size:11px;">${escapeHTML(r.desc || '')}</div>
+                <div style="font-size:10px; font-weight:800; color:var(--primary); margin-top:2px;">${effectLabels[r.effectType] || 'Custom'}${deltaBadge}</div>
+              </div>
+              <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+                <button type="button" class="icon-btn" style="width:28px; height:28px; font-size:13px;" onclick="openAddOrEditGroundRuleModal('${r.id}')" title="Edit Rule">✏️</button>
+                <button type="button" class="icon-btn" style="width:28px; height:28px; font-size:13px; color:var(--danger);" onclick="deleteCustomGroundRule('${r.id}')" title="Delete Rule">🗑️</button>
+                <label class="switch" aria-label="Toggle ${escapeHTML(r.name)}">
+                  <input type="checkbox" ${r.enabled ? 'checked' : ''} onchange="toggleCustomGroundRuleEnabled('${r.id}', this.checked)">
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+
+  openModal('⚡ Custom Gully / Box Ground Rules', html, null, false);
+}
+
+function toggleCustomGroundRuleEnabled(ruleId, enabled) {
+  const rules = loadCustomGroundRules();
+  const target = rules.find(r => r.id === ruleId);
+  if (!target) return;
+  target.enabled = !!enabled;
+  saveCustomGroundRules(rules);
+  showToast(`${target.name}: ${target.enabled ? 'ON' : 'OFF'}`);
+  if (document.getElementById('live-scorer')?.classList.contains('active')) {
+    renderLiveScorerView();
+  }
+  openCustomGroundRulesModal();
+}
+
+function deleteCustomGroundRule(ruleId) {
+  if (!confirm('Delete this custom ground rule?')) return;
+  const rules = loadCustomGroundRules().filter(r => r.id !== ruleId);
+  saveCustomGroundRules(rules);
+  showToast('Custom rule deleted');
+  if (document.getElementById('live-scorer')?.classList.contains('active')) {
+    renderLiveScorerView();
+  }
+  openCustomGroundRulesModal();
+}
+
+function openAddOrEditGroundRuleModal(ruleId = null) {
+  const rules = loadCustomGroundRules();
+  const existing = ruleId ? rules.find(r => r.id === ruleId) : null;
+  const curType = existing?.effectType || 'add_runs';
+  const curDelta = existing ? existing.runsDelta : 2;
+
+  const html = `
+    <div>
+      <div class="form-group" style="margin-bottom:10px;">
+        <label>Rule Title *</label>
+        <input type="text" id="cgrNameInput" value="${escapeHTML(existing?.name || '')}" placeholder="e.g. One-Tip One-Hand Out or Roof +4">
+      </div>
+      <div class="field-grid" style="margin-bottom:10px;">
+        <div class="form-group">
+          <label>Rule Action Type</label>
+          <select id="cgrTypeInput">
+            <option value="add_runs" ${curType === 'add_runs' ? 'selected' : ''}>Add Bonus Runs (+Runs)</option>
+            <option value="deduct_runs" ${curType === 'deduct_runs' ? 'selected' : ''}>Deduct Penalty Runs (-Runs)</option>
+            <option value="wicket_penalty" ${curType === 'wicket_penalty' ? 'selected' : ''}>Wicket Run Penalty (-Runs on Out)</option>
+            <option value="last_man" ${curType === 'last_man' ? 'selected' : ''}>Last Man Stands (Solo 9th-Wkt)</option>
+            <option value="note" ${curType === 'note' ? 'selected' : ''}>Custom Ground Note / Umpire Rule</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Run Value (if applicable)</label>
+          <input type="number" id="cgrDeltaInput" value="${curDelta}" placeholder="e.g. 2 or -3">
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:10px;">
+        <label>Rule Description</label>
+        <input type="text" id="cgrDescInput" value="${escapeHTML(existing?.desc || '')}" placeholder="Short explanation shown to scorers">
+      </div>
+      <label class="checklist-item" style="cursor:pointer; padding:4px 0;">
+        <input type="checkbox" id="cgrEnabledInput" ${existing ? (existing.enabled ? 'checked' : '') : 'checked'} style="width:16px; height:16px; accent-color:var(--primary);">
+        <span>Enable rule immediately</span>
+      </label>
+    </div>
+  `;
+
+  openModal(existing ? '✏️ Edit Custom Ground Rule' : '＋ Add Custom Ground Rule', html, async () => {
+    const name = (document.getElementById('cgrNameInput')?.value || '').trim();
+    if (!name) {
+      alert('Please enter a rule title.');
+      return false;
+    }
+    const effectType = document.getElementById('cgrTypeInput')?.value || 'note';
+    let runsDelta = parseInt(document.getElementById('cgrDeltaInput')?.value || '0', 10) || 0;
+    if ((effectType === 'deduct_runs' || effectType === 'wicket_penalty') && runsDelta > 0) {
+      runsDelta = -runsDelta;
+    }
+    const desc = (document.getElementById('cgrDescInput')?.value || '').trim();
+    const enabled = !!document.getElementById('cgrEnabledInput')?.checked;
+
+    const list = loadCustomGroundRules();
+    if (existing) {
+      const idx = list.findIndex(r => r.id === existing.id);
+      if (idx !== -1) list[idx] = { ...list[idx], name, effectType, runsDelta, desc, enabled };
+    } else {
+      list.push({ id: 'rule_' + generateId(), name, effectType, runsDelta, desc, enabled });
+    }
+    saveCustomGroundRules(list);
+    showToast(existing ? 'Custom rule updated!' : 'Custom ground rule added!');
+    if (document.getElementById('live-scorer')?.classList.contains('active')) {
+      renderLiveScorerView();
+    }
+    setTimeout(() => openCustomGroundRulesModal(), 60);
+    return true;
+  });
+}
+
+// Enhance openWicketModal: enforce Free Hit dismissal rules & apply Wicket Run Penalty if enabled
+const _origOpenWicketModalV36 = openWicketModal;
+openWicketModal = function() {
+  _origOpenWicketModalV36();
+  if (!activeMatch) return;
+  const inn = activeMatch.innings[activeMatch.innings.length - 1];
+  const lastBall = inn?.balls?.[inn.balls.length - 1];
+  const isFreeHit = !!(lastBall && lastBall.extraType === 'noBall');
+  const typeSel = document.getElementById('wfType');
+  if (isFreeHit && typeSel) {
+    const blockedOnFreeHit = new Set(['caught', 'bowled', 'lbw', 'caughtAndBowled', 'hitWicket']);
+    Array.from(typeSel.options).forEach(opt => {
+      if (blockedOnFreeHit.has(opt.value)) {
+        opt.disabled = true;
+        opt.textContent += ' (Blocked on Free Hit)';
+      }
+    });
+    typeSel.value = 'runOut';
+    if (typeof onDismissalTypeChange === 'function') onDismissalTypeChange('runOut');
+  }
+
+  // Apply Wicket Run Penalty automatically when modal confirms if enabled
+  const confirmBtn = document.getElementById('modalConfirmBtn');
+  if (confirmBtn) {
+    const prevOnclick = confirmBtn.onclick;
+    confirmBtn.onclick = async function(ev) {
+      const preWkts = inn.balls.filter(b => b.wicket).length;
+      const res = prevOnclick ? await prevOnclick.call(this, ev) : true;
+      const postWkts = inn.balls.filter(b => b.wicket).length;
+      if (postWkts > preWkts) {
+        const wktPenaltyRule = getActiveCustomGroundRules().find(r => r.effectType === 'wicket_penalty' && Number(r.runsDelta) !== 0);
+        if (wktPenaltyRule) {
+          const delta = Number(wktPenaltyRule.runsDelta);
+          inn.balls.push({
+            id: generateId(),
+            batterId: inn.strikerId || null,
+            nonStrikerId: inn.nonStrikerId || null,
+            bowlerId: inn.bowlerId || null,
+            batRuns: 0,
+            extraType: 'penalty',
+            extraRuns: delta,
+            extraTotal: delta,
+            wicket: false,
+            dismissal: 'none',
+            customRuleLabel: wktPenaltyRule.name,
+            timestamp: Date.now()
+          });
+          await saveActiveMatch();
+          showToast(`⚡ ${wktPenaltyRule.name}: ${delta} runs applied`);
+          renderLiveScorerView();
+        }
+      }
+      return res;
+    };
+  }
+};
+
+// ==========================================
+// TRANSPARENT YOUTUBE / OBS BROADCAST SCOREBOARD OVERLAY (#overlay=<matchId>)
+// ==========================================
+let obsOverlayMatchId = null;
+let obsOverlayChannel = null;
+
+function copyObsOverlayUrl(matchId) {
+  const url = `${window.location.origin}${window.location.pathname}#overlay=${encodeURIComponent(matchId)}`;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(url).then(() => {
+      alert(`📺 Transparent YouTube / OBS Browser Source URL copied!
+
+${url}
+
+Paste this URL as a Browser Source (1280x720) in OBS Studio or PRISM Live Studio for a transparent TV-style lower-third scoreboard.`);
+    });
+  } else {
+    prompt('Copy OBS / YouTube Overlay URL:', url);
+  }
+}
+
+async function renderBroadcastOverlayView() {
+  const stage = document.getElementById('obsOverlayStage');
+  if (!stage) return;
+
+  let matchRow = null;
+  if (sbClient && navigator.onLine && obsOverlayMatchId) {
+    const { data } = await sbClient.from('matches').select('*').eq('id', obsOverlayMatchId).maybeSingle();
+    if (data) matchRow = data;
+  }
+
+  if (!matchRow && db && obsOverlayMatchId) {
+    const localMatches = await dbGetAll('matches');
+    const found = localMatches.find(m => m.id === obsOverlayMatchId);
+    if (found) matchRow = { id: found.id, status: found.status, match_json: found };
+  }
+
+  if (!matchRow) {
+    stage.innerHTML = `<div class="obs-score-bug">Waiting for live match broadcast (#overlay)...</div>`;
+    return;
+  }
+
+  paintObsOverlayBug(matchRow);
+
+  if (sbClient && !obsOverlayChannel && obsOverlayMatchId) {
+    obsOverlayChannel = sbClient
+      .channel('obs-overlay-' + obsOverlayMatchId)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'matches',
+        filter: `id=eq.${obsOverlayMatchId}`
+      }, (payload) => {
+        if (payload.new) paintObsOverlayBug(payload.new);
+      })
+      .subscribe();
+  }
+}
+
+function paintObsOverlayBug(row) {
+  const stage = document.getElementById('obsOverlayStage');
+  if (!stage || !row) return;
+  const m = row.match_json || {};
+  const inn = (m.innings || [])[m.innings.length - 1];
+  if (!inn) return;
+
+  const st = CricketEngine.calculateInnings(inn, inn.squad || [], inn.bowlingSquad || []);
+  const batName = inn.batting === m.a ? (m.teamAName || 'BAT') : (m.teamBName || 'BAT');
+  const bowlName = inn.bowling === m.a ? (m.teamAName || 'BOWL') : (m.teamBName || 'BOWL');
+  const striker = st.batters.find(b => b.id === inn.strikerId);
+  const nonStriker = st.batters.find(b => b.id === inn.nonStrikerId);
+  const bowler = st.bowlers.find(b => b.id === inn.bowlerId);
+  const targetNote = m.target ? ` · TARGET ${m.target}` : '';
+
+  stage.innerHTML = `
+    <div class="obs-score-bug">
+      <div class="obs-team-pill">
+        <div>
+          <div style="font-size:11px; font-weight:900; letter-spacing:0.6px; color:#94a3b8;">${escapeHTML(batName.toUpperCase())} vs ${escapeHTML(bowlName.toUpperCase())}${targetNote}</div>
+          <div class="obs-score-main">${st.totalRuns}/${st.wickets} <span class="obs-overs-tag">(${st.oversFormatted}/${m.overs || 20} ov)</span></div>
+        </div>
+      </div>
+
+      <div class="obs-crease-strip">
+        <div>▶ <strong>${escapeHTML(striker?.name || 'Striker')}</strong> ${striker?.runs ?? 0} (${striker?.balls ?? 0})</div>
+        <div>${escapeHTML(nonStriker?.name || 'Non-Striker')} ${nonStriker?.runs ?? 0} (${nonStriker?.balls ?? 0})</div>
+      </div>
+
+      <div class="obs-bowler-col">
+        <div style="color:#38bdf8;">⚡ ${escapeHTML(bowler?.name || 'Bowler')}</div>
+        <div>${bowler?.wickets ?? 0}-${bowler?.runsConceded ?? 0} (${bowler?.oversFormatted ?? '0.0'})</div>
+      </div>
+    </div>
+  `;
+}
+
+// ==========================================
+// DUPLICATE PLAYER MERGE & 1080x1080 CAREER STATS POSTER
+// ==========================================
+async function openDuplicatePlayerMergeModal() {
+  const players = await dbGetAll('players');
+  if (players.length < 2) {
+    alert('You need at least 2 players in your registry to merge duplicates.');
+    return;
+  }
+
+  players.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
+  const optionsHTML = players.map(p => `<option value="${p.id}">${escapeHTML(p.name)} (${escapeHTML(p.role || 'Batter')})</option>`).join('');
+
+  const html = `
+    <div>
+      <p class="muted" style="font-size:12px; margin-bottom:10px;">Merge a duplicate player profile into a primary player without losing any historical runs, wickets, or match appearances.</p>
+      <div class="form-group" style="margin-bottom:10px;">
+        <label>Keep Primary Player *</label>
+        <select id="mergeKeepPlayerSel">${optionsHTML}</select>
+      </div>
+      <div class="form-group" style="margin-bottom:10px;">
+        <label>Merge &amp; Remove Duplicate Player *</label>
+        <select id="mergeDropPlayerSel">${optionsHTML}</select>
+      </div>
+    </div>
+  `;
+
+  openModal('🔀 Merge Duplicate Players', html, async () => {
+    const keepId = document.getElementById('mergeKeepPlayerSel')?.value;
+    const dropId = document.getElementById('mergeDropPlayerSel')?.value;
+    if (!keepId || !dropId || keepId === dropId) {
+      alert('Select two different players to merge.');
+      return false;
+    }
+
+    const [allPlayers, allTeams, allMatches] = await Promise.all([
+      dbGetAll('players'),
+      dbGetAll('teams'),
+      dbGetAll('matches')
+    ]);
+    const keepPlayer = allPlayers.find(p => p.id === keepId);
+    const dropPlayer = allPlayers.find(p => p.id === dropId);
+    if (!keepPlayer || !dropPlayer) return false;
+
+    if (!confirm(`Merge "${dropPlayer.name}" into "${keepPlayer.name}"? All historical stats will be transferred to "${keepPlayer.name}".`)) {
+      return false;
+    }
+
+    for (const tm of allTeams) {
+      if (Array.isArray(tm.playerIds) && tm.playerIds.includes(dropId)) {
+        tm.playerIds = Array.from(new Set(tm.playerIds.map(id => (id === dropId ? keepId : id))));
+        await dbPut('teams', tm);
+      }
+    }
+
+    for (const m of allMatches) {
+      let changed = false;
+      (m.innings || []).forEach(inn => {
+        if (inn.strikerId === dropId) { inn.strikerId = keepId; changed = true; }
+        if (inn.nonStrikerId === dropId) { inn.nonStrikerId = keepId; changed = true; }
+        if (inn.bowlerId === dropId) { inn.bowlerId = keepId; changed = true; }
+        ['squad', 'bowlingSquad'].forEach(key => {
+          if (Array.isArray(inn[key])) {
+            inn[key].forEach(sp => {
+              if (sp.id === dropId) {
+                sp.id = keepId;
+                sp.name = keepPlayer.name;
+                changed = true;
+              }
+            });
+          }
+        });
+        (inn.balls || []).forEach(b => {
+          if (b.batterId === dropId) { b.batterId = keepId; changed = true; }
+          if (b.nonStrikerId === dropId) { b.nonStrikerId = keepId; changed = true; }
+          if (b.bowlerId === dropId) { b.bowlerId = keepId; changed = true; }
+          if (b.wicketPlayerId === dropId) { b.wicketPlayerId = keepId; changed = true; }
+          if (b.dismissalDetails?.fielderId === dropId) { b.dismissalDetails.fielderId = keepId; changed = true; }
+        });
+      });
+      if (changed) await dbPut('matches', m);
+    }
+
+    await dbDelete('players', dropId);
+    showToast(`🔀 Merged "${dropPlayer.name}" into "${keepPlayer.name}"!`);
+    renderPlayers();
+    return true;
+  });
+}
+
+async function generatePlayerCareerPosterModal(playerId) {
+  const [players, careerMap] = await Promise.all([dbGetAll('players'), computeAllPlayersCareerMap()]);
+  const player = players.find(p => p.id === playerId);
+  if (!player) return;
+  const c = careerMap[playerId] || { matches: 0, runs: 0, balls: 0, highScore: 0, wickets: 0, legalBalls: 0, runsConceded: 0, bestW: 0, bestR: 0 };
+  const sr = c.balls > 0 ? ((c.runs / c.balls) * 100).toFixed(1) : '0.0';
+  const econ = c.legalBalls > 0 ? ((c.runsConceded / c.legalBalls) * 6).toFixed(2) : '0.00';
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 1080;
+  canvas.height = 1080;
+  const ctx = canvas.getContext('2d');
+
+  const grad = ctx.createLinearGradient(0, 0, 1080, 1080);
+  grad.addColorStop(0, '#04120d');
+  grad.addColorStop(0.55, '#0b2b20');
+  grad.addColorStop(1, '#04141c');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 1080, 1080);
+
+  ctx.strokeStyle = 'rgba(0, 230, 118, 0.45)';
+  ctx.lineWidth = 6;
+  ctx.strokeRect(36, 36, 1008, 1008);
+
+  ctx.fillStyle = '#00e676';
+  ctx.font = '900 30px system-ui, sans-serif';
+  ctx.fillText('CRICSCORER CAREER CARD', 84, 115);
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '900 72px system-ui, sans-serif';
+  ctx.fillText(player.name.toUpperCase().slice(0, 20), 84, 215);
+
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '700 32px system-ui, sans-serif';
+  ctx.fillText(`${player.role || 'All-Rounder'} · ${c.matches} Matches Played`, 84, 268);
+
+  const tiles = [
+    { label: 'CAREER RUNS', val: String(c.runs), accent: '#00e676' },
+    { label: 'HIGH SCORE', val: String(c.highScore), accent: '#38bdf8' },
+    { label: 'STRIKE RATE', val: sr, accent: '#fbbf24' },
+    { label: 'WICKETS', val: String(c.wickets), accent: '#f43f5e' },
+    { label: 'ECONOMY', val: econ, accent: '#a855f7' },
+    { label: 'MATCHES', val: String(c.matches), accent: '#34d399' }
+  ];
+
+  tiles.forEach((t, idx) => {
+    const col = idx % 2;
+    const row = Math.floor(idx / 2);
+    const x = 84 + col * 470;
+    const y = 330 + row * 195;
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    ctx.fillRect(x, y, 442, 168);
+    ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, 442, 168);
+
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '800 24px system-ui, sans-serif';
+    ctx.fillText(t.label, x + 28, y + 52);
+
+    ctx.fillStyle = t.accent;
+    ctx.font = '900 66px system-ui, sans-serif';
+    ctx.fillText(t.val, x + 28, y + 132);
+  });
+
+  ctx.fillStyle = '#64748b';
+  ctx.font = '700 26px system-ui, sans-serif';
+  ctx.fillText('Generated with CricScorer · Live Cricket & Tournament Hub', 84, 995);
+
+  const dataUrl = canvas.toDataURL('image/png');
+  const html = `
+    <div style="text-align:center;">
+      <img src="${dataUrl}" alt="${escapeHTML(player.name)} Career Card" style="width:100%; max-width:340px; border-radius:14px; border:1px solid var(--border); margin-bottom:10px;" />
+      <div>
+        <a href="${dataUrl}" download="${escapeHTML(player.name.replace(/\s+/g, '_'))}_Career_Card.png" class="btn btn-primary" style="display:inline-block; text-decoration:none; width:100%;">⬇️ Download 1080×1080 Career PNG</a>
+      </div>
+    </div>
+  `;
+  openModal(`🪪 ${player.name} — Career Stats Card`, html, null, false);
 }
