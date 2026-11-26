@@ -3520,3 +3520,56 @@ body[data-theme="light"] .pmc-live-badge {
   font-size: 11.5px;
   font-weight: 800;
 }
+
+
+/* ==========================================
+   V2.29 MATCH POSTER GENERATOR & PUBLIC TOURNAMENT LINK
+   ========================================== */
+
+.poster-preview-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.poster-canvas-frame {
+  width: 100%;
+  max-width: 340px;
+  aspect-ratio: 1 / 1;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+  background: #0b1017;
+}
+
+.poster-canvas-frame canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.poster-theme-pills {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  width: 100%;
+}
+
+.poster-theme-btn {
+  padding: 7px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.poster-theme-btn.active {
+  border-color: var(--primary);
+  background: var(--primary-glow);
+  color: var(--primary);
+}

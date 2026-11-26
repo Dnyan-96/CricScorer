@@ -441,7 +441,7 @@ class CricketEngine {
 // 3. NAVIGATION & VIEW CONTROLLER (9 SECTIONS)
 // ==========================================
 
-const VALID_TABS = ['dashboard', 'tournaments', 'live-scorer', 'create-match', 'teams', 'players', 'history', 'statistics', 'settings', 'scorecard', 'watch-live'];
+const VALID_TABS = ['dashboard', 'tournaments', 'live-scorer', 'create-match', 'teams', 'players', 'history', 'statistics', 'settings', 'scorecard', 'watch-live', 'watch-tournament'];
 
 function persistActiveTab(tabId) {
   if (!VALID_TABS.includes(tabId)) return;
@@ -459,6 +459,10 @@ function getSavedActiveTab() {
     if (rawHash.startsWith('watch=')) {
       spectatorWatchMatchId = decodeURIComponent(rawHash.slice(6));
       return 'watch-live';
+    }
+    if (rawHash.startsWith('tournament=')) {
+      publicWatchTournamentId = decodeURIComponent(rawHash.slice(11));
+      return 'watch-tournament';
     }
     if (VALID_TABS.includes(rawHash)) return rawHash;
     const storedTab = sessionStorage.getItem('cricscorer_active_tab');
@@ -481,6 +485,7 @@ function navigate(tabId, options = {}) {
   if (targetTab === 'dashboard') { renderDashboard(); refreshPublicLiveCenter(); }
   if (targetTab === 'tournaments') renderTournamentsView();
   if (targetTab === 'watch-live') renderSpectatorView();
+  if (targetTab === 'watch-tournament') renderPublicTournamentHub();
   if (targetTab === 'live-scorer') renderLiveScorerView();
   if (targetTab === 'create-match') renderCreateMatchView();
   if (targetTab === 'teams') renderTeams();
@@ -646,7 +651,7 @@ function createMatchItemHTML(m, teams) {
       </div>
       <div class="item-actions">
         ${isLive ? `<button class="btn btn-primary" style="font-size:12px; padding:7px 13px;" onclick="resumeMatch('${m.id}')">▶ Resume</button>` : ''}
-        ${m.status === 'Completed' ? `<button class="btn btn-secondary" style="font-size:12px; padding:7px 12px;" onclick="viewDetailedScorecard('${m.id}')">Scorecard</button>` : ''}
+        ${m.status === 'Completed' ? `<button class="btn btn-secondary" style="font-size:12px; padding:7px 10px;" onclick="viewDetailedScorecard('${m.id}')">Scorecard</button><button class="btn btn-primary" style="font-size:12px; padding:7px 10px;" onclick="openMatchPosterModal('${m.id}')" title="Generate 1080x1080 Match Poster">🖼️</button>` : ''}
         ${m.status === 'Upcoming' ? `<button class="btn btn-primary" style="font-size:12px; padding:7px 12px;" onclick="resumeMatch('${m.id}')">Start</button>` : ''}
         <button class="btn btn-outline" style="font-size:12px; padding:7px 9px;" onclick="deleteMatchPrompt('${m.id}')" title="Delete Match">⋮</button>
       </div>
@@ -3235,7 +3240,10 @@ async function viewDetailedScorecard(matchId) {
           ${tossSummary ? `<p class="muted" style="font-size:11px; margin-top:3px;">🪙 ${tossSummary}</p>` : ''}
           <p style="color:var(--primary); font-weight:800; margin-top:5px;">${escapeHTML(m.result || m.status)}</p>
         </div>
-        <button type="button" class="btn btn-primary" style="font-size:11px; padding:6px 10px; white-space:nowrap;" onclick="shareMatchSummaryText('${m.id}')">📲 Share</button>
+        <div style="display:flex; gap:6px; flex-shrink:0;">
+          <button type="button" class="btn btn-secondary" style="font-size:11px; padding:6px 9px; white-space:nowrap;" onclick="openMatchPosterModal('${m.id}')">🖼️ Poster</button>
+          <button type="button" class="btn btn-primary" style="font-size:11px; padding:6px 9px; white-space:nowrap;" onclick="shareMatchSummaryText('${m.id}')">📲 Text</button>
+        </div>
       </div>
 
       ${mvp ? `
@@ -4656,7 +4664,8 @@ async function renderTournamentsView() {
           <h2 style="font-size:19px; font-weight:950; margin:0 0 4px;">${escapeHTML(activeTourn.name)}</h2>
           <p class="muted" style="font-size:12px; margin:0;">${(activeTourn.teamIds || []).length} Teams · ${completedCount}/${totalFixtures} Matches Played · ${activeTourn.overs || 20} Overs/side</p>
         </div>
-        <div style="display:flex; gap:6px;">
+        <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
+          <button type="button" class="btn btn-primary" style="padding:6px 10px; font-size:11px;" onclick="sharePublicTournamentLink('${activeTourn.id}')">📤 Share Hub</button>
           <button type="button" class="btn btn-secondary" style="padding:6px 10px; font-size:11px;" onclick="openAddTeamToTournamentModal('${activeTourn.id}')">＋ Team</button>
           <button type="button" class="btn btn-secondary" style="padding:6px 10px; font-size:11px; color:var(--danger);" onclick="deleteTournamentPrompt('${activeTourn.id}')">🗑️</button>
         </div>
@@ -5767,4 +5776,484 @@ function paintSpectatorScoreboard(row) {
       </div>
     </div>
   `;
+}
+
+
+// ==========================================
+// V2.29: 1080x1080 HTML5 CANVAS MATCH POSTER & PUBLIC TOURNAMENT HUB
+// ==========================================
+let publicWatchTournamentId = null;
+let publicTournamentRealtimeChannel = null;
+let activePosterMatchObj = null;
+let activePosterTeamsList = [];
+let activePosterPlayersMap = {};
+let currentPosterTheme = 'dark';
+
+function viewMatchScorecardModal(matchId) {
+  return viewDetailedScorecard(matchId);
+}
+
+function drawRoundedRectCanvas(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function drawTeamShieldOnCanvas(ctx, cx, cy, teamName, primaryColor, accentColor) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - 52);
+  ctx.lineTo(cx + 46, cy - 34);
+  ctx.lineTo(cx + 46, cy + 4);
+  ctx.bezierCurveTo(cx + 46, cy + 34, cx + 22, cy + 50, cx, cy + 58);
+  ctx.bezierCurveTo(cx - 22, cy + 50, cx - 46, cy + 34, cx - 46, cy + 4);
+  ctx.lineTo(cx - 46, cy - 34);
+  ctx.closePath();
+  ctx.fillStyle = primaryColor;
+  ctx.fill();
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = accentColor;
+  ctx.stroke();
+
+  const initial = (teamName || 'T').trim().charAt(0).toUpperCase();
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '900 44px system-ui, -apple-system, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(initial, cx, cy + 4);
+  ctx.restore();
+}
+
+function renderMatchSummaryPosterToCanvas(canvas, matchObj, teamsList, playersMap, theme = 'dark') {
+  if (!canvas || !matchObj) return;
+  const ctx = canvas.getContext('2d');
+  const W = 1080;
+  const H = 1080;
+  canvas.width = W;
+  canvas.height = H;
+
+  const isLight = theme === 'light';
+  const inn1 = matchObj.innings?.[0];
+  const inn2 = matchObj.innings?.[1];
+
+  const t1Id = inn1 ? inn1.batting : matchObj.a;
+  const t2Id = inn1 ? inn1.bowling : matchObj.b;
+  const team1Name = teamsList.find(t => t.id === t1Id)?.name || matchObj.teamAName || 'Team 1';
+  const team2Name = teamsList.find(t => t.id === t2Id)?.name || matchObj.teamBName || 'Team 2';
+
+  const st1 = inn1 ? CricketEngine.calculateInnings(inn1, inn1.squad || [], inn1.bowlingSquad || []) : { totalRuns: 0, wickets: 0, oversFormatted: '0.0', batters: [], bowlers: [] };
+  const st2 = inn2 ? CricketEngine.calculateInnings(inn2, inn2.squad || [], inn2.bowlingSquad || []) : null;
+
+  // Gather top batter & top bowler across innings
+  const allBatters = [];
+  const allBowlers = [];
+  [st1, st2].filter(Boolean).forEach(st => {
+    (st.batters || []).forEach(b => { if (b.runs > 0 || b.balls > 0) allBatters.push(b); });
+    (st.bowlers || []).forEach(bo => { if (bo.legalBalls > 0 || bo.wickets > 0) allBowlers.push(bo); });
+  });
+  allBatters.sort((a, b) => (b.runs - a.runs) || (a.balls - b.balls));
+  allBowlers.sort((a, b) => (b.wickets - a.wickets) || (a.runsConceded - b.runsConceded));
+
+  const topBatter = allBatters[0] || null;
+  const topBowler = allBowlers[0] || null;
+  const mvp = calculateMatchMVP(matchObj, playersMap);
+
+  // Background Gradient
+  const bgGrad = ctx.createLinearGradient(0, 0, W, H);
+  if (isLight) {
+    bgGrad.addColorStop(0, '#ecfdf5');
+    bgGrad.addColorStop(0.55, '#ffffff');
+    bgGrad.addColorStop(1, '#f0fdf4');
+  } else {
+    bgGrad.addColorStop(0, '#071318');
+    bgGrad.addColorStop(0.5, '#0b2922');
+    bgGrad.addColorStop(1, '#09111a');
+  }
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, W, H);
+
+  // Outer Stadium Border Frame
+  drawRoundedRectCanvas(ctx, 34, 34, W - 68, H - 68, 36);
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = isLight ? '#059669' : '#10b981';
+  ctx.stroke();
+
+  // Top Brand Pill
+  drawRoundedRectCanvas(ctx, 360, 66, 360, 48, 24);
+  ctx.fillStyle = isLight ? '#059669' : 'rgba(16, 185, 129, 0.2)';
+  ctx.fill();
+  ctx.fillStyle = isLight ? '#ffffff' : '#34d399';
+  ctx.font = '900 21px system-ui, -apple-system, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('🏏 CRICSCORER OFFICIAL', W / 2, 97);
+
+  // Match Title & Format
+  ctx.fillStyle = isLight ? '#064e3b' : '#94a3b8';
+  ctx.font = '800 24px system-ui, -apple-system, sans-serif';
+  ctx.fillText(`${(matchObj.format || 'T20').toUpperCase()} · ${(matchObj.title || 'MATCH SUMMARY').toUpperCase().slice(0, 38)}`, W / 2, 162);
+
+  // Team 1 & Team 2 Shields + Scores
+  drawTeamShieldOnCanvas(ctx, 250, 275, team1Name, '#0284c7', '#38bdf8');
+  drawTeamShieldOnCanvas(ctx, 830, 275, team2Name, '#dc2626', '#f87171');
+
+  ctx.fillStyle = isLight ? '#0f172a' : '#f8fafc';
+  ctx.font = '900 32px system-ui, -apple-system, sans-serif';
+  ctx.fillText(team1Name.slice(0, 18), 250, 375);
+  ctx.fillText(team2Name.slice(0, 18), 830, 375);
+
+  ctx.fillStyle = isLight ? '#059669' : '#34d399';
+  ctx.font = '900 54px system-ui, -apple-system, sans-serif';
+  ctx.fillText(`${st1.totalRuns}/${st1.wickets}`, 250, 442);
+  ctx.fillText(st2 ? `${st2.totalRuns}/${st2.wickets}` : 'DNB', 830, 442);
+
+  ctx.fillStyle = isLight ? '#475569' : '#94a3b8';
+  ctx.font = '700 24px system-ui, -apple-system, sans-serif';
+  ctx.fillText(`(${st1.oversFormatted} ov)`, 250, 482);
+  ctx.fillText(st2 ? `(${st2.oversFormatted} ov)` : '', 830, 482);
+
+  // Center VS Emblem
+  drawRoundedRectCanvas(ctx, W / 2 - 42, 265, 84, 52, 16);
+  ctx.fillStyle = isLight ? '#d1fae5' : 'rgba(255,255,255,0.08)';
+  ctx.fill();
+  ctx.fillStyle = isLight ? '#065f46' : '#34d399';
+  ctx.font = '900 26px system-ui, -apple-system, sans-serif';
+  ctx.fillText('VS', W / 2, 300);
+
+  // Result Banner
+  drawRoundedRectCanvas(ctx, 84, 528, W - 168, 76, 20);
+  ctx.fillStyle = isLight ? '#059669' : '#10b981';
+  ctx.fill();
+  ctx.fillStyle = isLight ? '#ffffff' : '#052e16';
+  ctx.font = '900 30px system-ui, -apple-system, sans-serif';
+  ctx.fillText(`🏆 ${(matchObj.result || 'MATCH COMPLETED').slice(0, 42)}`, W / 2, 576);
+
+  // Two Performer Cards (Top Batter & Top Bowler)
+  const cardBg = isLight ? '#f8fafc' : 'rgba(255, 255, 255, 0.06)';
+  const cardBorder = isLight ? '#cbd5e1' : 'rgba(255, 255, 255, 0.14)';
+
+  // Left Card: Top Batter
+  drawRoundedRectCanvas(ctx, 84, 636, 436, 178, 22);
+  ctx.fillStyle = cardBg;
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = cardBorder;
+  ctx.stroke();
+
+  ctx.textAlign = 'left';
+  ctx.fillStyle = isLight ? '#0369a1' : '#38bdf8';
+  ctx.font = '900 20px system-ui, -apple-system, sans-serif';
+  ctx.fillText('🏏 TOP BATTER', 114, 680);
+
+  ctx.fillStyle = isLight ? '#0f172a' : '#ffffff';
+  ctx.font = '900 30px system-ui, -apple-system, sans-serif';
+  ctx.fillText(topBatter ? topBatter.name.slice(0, 18) : 'N/A', 114, 730);
+
+  ctx.fillStyle = isLight ? '#059669' : '#34d399';
+  ctx.font = '900 32px system-ui, -apple-system, sans-serif';
+  ctx.fillText(topBatter ? `${topBatter.runs}${topBatter.isOut ? '' : '*'} (${topBatter.balls}b · ${topBatter.fours}x4, ${topBatter.sixes}x6)` : '--', 114, 778);
+
+  // Right Card: Top Bowler
+  drawRoundedRectCanvas(ctx, 560, 636, 436, 178, 22);
+  ctx.fillStyle = cardBg;
+  ctx.fill();
+  ctx.strokeStyle = cardBorder;
+  ctx.stroke();
+
+  ctx.fillStyle = isLight ? '#b91c1c' : '#f87171';
+  ctx.font = '900 20px system-ui, -apple-system, sans-serif';
+  ctx.fillText('⚡ TOP BOWLER', 590, 680);
+
+  ctx.fillStyle = isLight ? '#0f172a' : '#ffffff';
+  ctx.font = '900 30px system-ui, -apple-system, sans-serif';
+  ctx.fillText(topBowler ? topBowler.name.slice(0, 18) : 'N/A', 590, 730);
+
+  ctx.fillStyle = isLight ? '#d97706' : '#fbbf24';
+  ctx.font = '900 32px system-ui, -apple-system, sans-serif';
+  ctx.fillText(topBowler ? `${topBowler.wickets}/${topBowler.runsConceded} (${topBowler.oversFormatted} ov)` : '--', 590, 778);
+
+  // MVP Spotlight Strip
+  drawRoundedRectCanvas(ctx, 84, 842, W - 168, 114, 22);
+  ctx.fillStyle = isLight ? '#fef3c7' : 'rgba(245, 158, 11, 0.16)';
+  ctx.fill();
+  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = isLight ? '#f59e0b' : 'rgba(251, 191, 36, 0.55)';
+  ctx.stroke();
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = isLight ? '#92400e' : '#fbbf24';
+  ctx.font = '900 20px system-ui, -apple-system, sans-serif';
+  ctx.fillText('🌟 PLAYER OF THE MATCH (MVP)', W / 2, 884);
+
+  ctx.fillStyle = isLight ? '#0f172a' : '#ffffff';
+  ctx.font = '900 34px system-ui, -apple-system, sans-serif';
+  const mvpLine = mvp ? `${mvp.name} — ${mvp.highlights.slice(0, 2).join(' · ')}` : 'All-Round Team Effort';
+  ctx.fillText(mvpLine.slice(0, 42), W / 2, 930);
+
+  // Footer Watermark
+  ctx.fillStyle = isLight ? '#64748b' : '#64748b';
+  ctx.font = '700 20px system-ui, -apple-system, sans-serif';
+  ctx.fillText('Scored Live on CricScorer PWA', W / 2, 1005);
+}
+
+async function openMatchPosterModal(matchId) {
+  const [matches, teams, players] = await Promise.all([
+    dbGetAll('matches'),
+    dbGetAll('teams'),
+    dbGetAll('players')
+  ]);
+  const matchObj = matches.find(m => m.id === matchId) || (activeMatch && activeMatch.id === matchId ? activeMatch : null);
+  if (!matchObj) {
+    showToast('Match not found.');
+    return;
+  }
+
+  activePosterMatchObj = matchObj;
+  activePosterTeamsList = teams;
+  activePosterPlayersMap = {};
+  (players || []).forEach(p => { activePosterPlayersMap[p.id] = p.name; });
+  currentPosterTheme = document.body.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+
+  const html = `
+    <div class="poster-preview-wrap">
+      <div class="poster-theme-pills">
+        <button type="button" class="poster-theme-btn ${currentPosterTheme === 'dark' ? 'active' : ''}" id="posterThemeDarkBtn" onclick="switchPosterTheme('dark')">🌙 Stadium Dark</button>
+        <button type="button" class="poster-theme-btn ${currentPosterTheme === 'light' ? 'active' : ''}" id="posterThemeLightBtn" onclick="switchPosterTheme('light')">☀️ Sunlit Emerald</button>
+      </div>
+      <div class="poster-canvas-frame">
+        <canvas id="matchSummaryPosterCanvas"></canvas>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; width:100%;">
+        <button type="button" class="btn btn-secondary" onclick="downloadMatchPosterPNG()">⬇️ Download PNG</button>
+        <button type="button" class="btn btn-primary" onclick="shareMatchPosterImage()">📤 Share Poster</button>
+      </div>
+    </div>
+  `;
+
+  openModal('1080×1080 Match Result Poster', html, null, false);
+  setTimeout(() => {
+    const cvs = document.getElementById('matchSummaryPosterCanvas');
+    renderMatchSummaryPosterToCanvas(cvs, activePosterMatchObj, activePosterTeamsList, activePosterPlayersMap, currentPosterTheme);
+  }, 40);
+}
+
+function switchPosterTheme(theme) {
+  currentPosterTheme = theme;
+  document.getElementById('posterThemeDarkBtn')?.classList.toggle('active', theme === 'dark');
+  document.getElementById('posterThemeLightBtn')?.classList.toggle('active', theme === 'light');
+  const cvs = document.getElementById('matchSummaryPosterCanvas');
+  renderMatchSummaryPosterToCanvas(cvs, activePosterMatchObj, activePosterTeamsList, activePosterPlayersMap, currentPosterTheme);
+}
+
+function downloadMatchPosterPNG() {
+  const cvs = document.getElementById('matchSummaryPosterCanvas');
+  if (!cvs) return;
+  const link = document.createElement('a');
+  const slug = (activePosterMatchObj?.title || 'cricscorer-match').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  link.download = `${slug}-poster.png`;
+  link.href = cvs.toDataURL('image/png');
+  link.click();
+  showToast('1080×1080 Match Poster downloaded!');
+}
+
+async function shareMatchPosterImage() {
+  const cvs = document.getElementById('matchSummaryPosterCanvas');
+  if (!cvs) return;
+  cvs.toBlob(async (blob) => {
+    if (!blob) return;
+    const file = new File([blob], 'cricscorer-match-summary.png', { type: 'image/png' });
+    const shareText = `🏏 ${activePosterMatchObj?.title || 'Match Result'} — ${activePosterMatchObj?.result || 'Scored on CricScorer'}`;
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({
+          title: 'CricScorer Match Summary',
+          text: shareText,
+          files: [file]
+        });
+        return;
+      } catch (e) {}
+    }
+    downloadMatchPosterPNG();
+  }, 'image/png');
+}
+
+// Public Tournament Link Sharing & Read-Only Spectator Hub (#tournament=<id>)
+async function sharePublicTournamentLink(tournId) {
+  const tourns = await getAllTournaments();
+  if (currentCloudUser && tourns.length) {
+    await queueCloudTournamentsSync(tourns);
+  }
+  const tObj = tourns.find(t => t.id === tournId);
+  const shareUrl = `${window.location.origin}${window.location.pathname}#tournament=${encodeURIComponent(tournId)}`;
+  const shareText = `🏆 Follow Live Points Table, NRR & Fixtures for ${tObj?.name || 'our Cricket Tournament'}:
+${shareUrl}`;
+
+  if (navigator.share) {
+    navigator.share({
+      title: tObj?.name || 'CricScorer Tournament Hub',
+      text: shareText,
+      url: shareUrl
+    }).catch(() => {});
+  } else if (navigator.clipboard) {
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      alert(`Public Tournament Hub Link copied!
+
+${shareUrl}
+
+Share this link in your tournament WhatsApp group so all teams can view live Points Table & Fixtures.`);
+    }).catch(() => {
+      prompt('Copy and share this Tournament Hub Link:', shareUrl);
+    });
+  } else {
+    prompt('Copy and share this Tournament Hub Link:', shareUrl);
+  }
+}
+
+function exitPublicTournamentMode() {
+  if (publicTournamentRealtimeChannel && sbClient) {
+    sbClient.removeChannel(publicTournamentRealtimeChannel);
+    publicTournamentRealtimeChannel = null;
+  }
+  publicWatchTournamentId = null;
+  navigate('dashboard');
+}
+
+async function renderPublicTournamentHub() {
+  const container = document.getElementById('publicTournamentHubContainer');
+  if (!container) return;
+
+  if (!publicWatchTournamentId) {
+    container.innerHTML = `<div class="empty-state">No tournament ID specified in link.</div>`;
+    return;
+  }
+
+  let tournData = null;
+  let teamsMap = {};
+  let cloudMatches = [];
+
+  // Try Supabase cloud first so spectators on any device see live updates
+  if (sbClient && navigator.onLine) {
+    try {
+      const [{ data: tRow }, { data: mRows }] = await Promise.all([
+        sbClient.from('tournaments').select('*').eq('id', publicWatchTournamentId).maybeSingle(),
+        sbClient.from('matches').select('*').eq('tournament_id', publicWatchTournamentId)
+      ]);
+      if (tRow && tRow.data_json) {
+        tournData = tRow.data_json;
+        teamsMap = tournData.teamsMap || {};
+      }
+      cloudMatches = (mRows || []).map(r => r.match_json || r);
+    } catch (e) {}
+  }
+
+  // Fallback to local IndexedDB if opened offline on scorer's own device
+  if (!tournData && db) {
+    const [localTourns, localTeams, localMatches] = await Promise.all([
+      getAllTournaments(),
+      dbGetAll('teams'),
+      dbGetAll('matches')
+    ]);
+    tournData = localTourns.find(t => t.id === publicWatchTournamentId) || null;
+    localTeams.forEach(t => { teamsMap[t.id] = t.name; });
+    cloudMatches = localMatches.filter(m => m.tournamentId === publicWatchTournamentId);
+  }
+
+  if (!tournData) {
+    container.innerHTML = `<div class="empty-state">Tournament not found or not yet synced to cloud by the organizer.</div>`;
+    return;
+  }
+
+  const standings = computeTournamentStandings(tournData, teamsMap, cloudMatches);
+  const fixtures = tournData.fixtures || [];
+
+  container.innerHTML = `
+    <div class="spectator-banner" style="background:rgba(245,158,11,0.14); border-color:rgba(245,158,11,0.45);">
+      <span>🏆 PUBLIC TOURNAMENT HUB · Live Standings &amp; Fixtures</span>
+      <button type="button" class="pill-btn" style="padding:3px 9px; font-size:10.5px;" onclick="sharePublicTournamentLink('${tournData.id}')">📤 Share</button>
+    </div>
+
+    <div class="tourn-hero-card">
+      <div class="eyebrow" style="color:var(--primary); margin-bottom:3px;">${escapeHTML(tournData.format || 'T20')} · ${tournData.overs || 20} OVERS</div>
+      <h2 style="font-size:20px; font-weight:950; margin:0 0 4px;">${escapeHTML(tournData.name)}</h2>
+      <p class="muted" style="font-size:12px; margin:0;">${(tournData.teamIds || []).length} Competing Teams · ${fixtures.length} Scheduled Matches</p>
+    </div>
+
+    <div class="section-title-row">
+      <h2>📊 Live Points Table &amp; NRR</h2>
+      <span class="muted" style="font-size:11px;">Win = 2 pts</span>
+    </div>
+    <div class="card" style="padding:10px; margin-bottom:16px; overflow-x:auto;">
+      <table class="crease-table">
+        <thead>
+          <tr><th>#</th><th>Team</th><th>M</th><th>W</th><th>L</th><th>NRR</th><th>PTS</th></tr>
+        </thead>
+        <tbody>
+          ${standings.map((row, idx) => `
+            <tr>
+              <td><strong>${idx + 1}</strong></td>
+              <td><strong>${escapeHTML(row.teamName)}</strong></td>
+              <td>${row.played}</td>
+              <td>${row.won}</td>
+              <td>${row.lost}</td>
+              <td style="font-weight:700; color:${row.nrr >= 0 ? 'var(--primary)' : 'var(--danger)'};">${row.nrr >= 0 ? '+' : ''}${row.nrr.toFixed(3)}</td>
+              <td><strong style="color:var(--primary);">${row.points}</strong></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section-title-row">
+      <h2>🗓️ Fixtures &amp; Live Scores</h2>
+    </div>
+    <div>
+      ${fixtures.map(fx => {
+        const nameA = teamsMap[fx.teamAId] || 'Team A';
+        const nameB = teamsMap[fx.teamBId] || 'Team B';
+        const linked = fx.matchId ? cloudMatches.find(m => m.id === fx.matchId) : null;
+        const st = linked?.status || fx.status;
+        const statusCls = st === 'Completed' ? 'completed' : st === 'Live' ? 'live' : 'scheduled';
+        return `
+          <div class="tourn-fixture-card">
+            <div class="tourn-fixture-top">
+              <span>MATCH #${fx.matchNumber} · ${escapeHTML(fx.roundLabel || 'League')}</span>
+              <span class="tourn-status-badge ${statusCls}">${escapeHTML(st)}</span>
+            </div>
+            <div class="tourn-fixture-teams">
+              <span>${escapeHTML(nameA)}</span>
+              <span class="tourn-vs-pill">VS</span>
+              <span>${escapeHTML(nameB)}</span>
+            </div>
+            ${(linked?.result || fx.result) ? `<div style="margin-top:6px; font-size:11.5px; font-weight:800; color:var(--primary);">🏆 ${escapeHTML(linked?.result || fx.result)}</div>` : ''}
+            ${fx.matchId ? `
+              <div style="margin-top:8px; display:flex; justify-content:flex-end;">
+                <button type="button" class="btn btn-primary" style="padding:5px 11px; font-size:11px;" onclick="openSpectatorLiveMatch('${fx.matchId}')">📺 Watch Scoreboard</button>
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+
+  if (sbClient && !publicTournamentRealtimeChannel) {
+    publicTournamentRealtimeChannel = sbClient
+      .channel('watch-tourn-' + publicWatchTournamentId)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'tournaments',
+        filter: `id=eq.${publicWatchTournamentId}`
+      }, () => {
+        renderPublicTournamentHub();
+      })
+      .subscribe();
+  }
 }
