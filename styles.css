@@ -3869,3 +3869,240 @@ body[data-theme="light"] .cap-spotlight-card.mvp-cap {
     max-width: 66px;
   }
 }
+
+
+/* ==========================================
+   V2.32 5-SLOT BROADCAST FLOATING BOTTOM DOCK & MORE DRAWER
+   ========================================== */
+
+body {
+  padding-bottom: calc(82px + env(safe-area-inset-bottom, 0px));
+}
+
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: calc(64px + env(safe-area-inset-bottom, 0px));
+  padding: 4px 8px env(safe-area-inset-bottom, 0px);
+  background: rgba(10, 22, 18, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-top: 1px solid rgba(0, 230, 118, 0.22);
+  box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.38);
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  align-items: center;
+  z-index: 120;
+}
+
+body[data-theme="light"] .bottom-nav {
+  background: rgba(255, 255, 255, 0.94);
+  border-top: 1px solid rgba(18, 124, 82, 0.22);
+  box-shadow: 0 -6px 22px rgba(15, 23, 42, 0.08);
+}
+
+.bottom-nav .nav-item {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 4px 2px;
+  border-radius: 12px;
+  color: var(--text-muted);
+  transition: color 0.18s ease, transform 0.14s ease;
+}
+
+.bottom-nav .nav-item:active {
+  transform: scale(0.94);
+}
+
+.bottom-nav .nav-item.active {
+  color: var(--primary);
+}
+
+.bottom-nav .nav-item.active::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  width: 24px;
+  height: 3px;
+  border-radius: 0 0 4px 4px;
+  background: var(--primary);
+  box-shadow: 0 0 10px var(--primary);
+}
+
+.bottom-nav .nav-icon {
+  font-size: 19px;
+  line-height: 1;
+}
+
+.bottom-nav .nav-text {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.1px;
+}
+
+.nav-icon-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nav-live-beacon {
+  position: absolute;
+  top: -2px;
+  right: -6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  box-shadow: 0 0 0 2px var(--bg-surface);
+  animation: scorerPulseDot 1.2s infinite;
+}
+
+/* Raised Center "+ New" Action Button */
+.bottom-nav .nav-item-center {
+  justify-content: flex-end;
+  padding-bottom: 6px;
+}
+
+.bottom-nav .nav-item-center.active::before {
+  display: none;
+}
+
+.nav-center-fab {
+  position: absolute;
+  top: -14px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #00e676 0%, #059669 100%);
+  color: #03150b;
+  font-size: 23px;
+  font-weight: 950;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 18px rgba(0, 230, 118, 0.42), 0 0 0 3px var(--bg-surface);
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+body[data-theme="light"] .nav-center-fab {
+  background: linear-gradient(135deg, #10b981 0%, #047857 100%);
+  color: #ffffff;
+  box-shadow: 0 6px 16px rgba(5, 150, 105, 0.35), 0 0 0 3px #ffffff;
+}
+
+.bottom-nav .nav-item-center.active .nav-center-fab {
+  transform: scale(1.06);
+}
+
+/* Slide-Up "More" Navigation Drawer */
+.more-nav-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(3, 12, 8, 0.62);
+  backdrop-filter: blur(3px);
+  z-index: 130;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.22s ease;
+}
+
+.more-nav-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.more-nav-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-width: 600px;
+  margin: 0 auto;
+  background: var(--bg-surface);
+  border-top: 1px solid rgba(0, 230, 118, 0.28);
+  border-radius: 22px 22px 0 0;
+  padding: 10px 16px calc(22px + env(safe-area-inset-bottom, 0px));
+  z-index: 140;
+  box-shadow: 0 -14px 40px rgba(0, 0, 0, 0.55);
+  transform: translateY(105%);
+  transition: transform 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.more-nav-sheet.open {
+  transform: translateY(0);
+}
+
+.more-sheet-handle {
+  width: 38px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border);
+  margin: 0 auto 10px;
+  cursor: pointer;
+}
+
+.more-sheet-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.more-sheet-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 9px;
+}
+
+.more-tile-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+  padding: 13px 8px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-main);
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.12s ease;
+}
+
+.more-tile-btn:active {
+  transform: scale(0.96);
+}
+
+.more-tile-btn.active {
+  border-color: var(--primary);
+  background: var(--primary-glow);
+}
+
+.more-tile-icon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.more-tile-title {
+  font-size: 12.5px;
+  font-weight: 850;
+}
+
+.more-tile-sub {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+#toastNotification {
+  bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+}

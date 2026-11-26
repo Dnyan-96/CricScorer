@@ -729,44 +729,76 @@
   </main>
 
   <!-- Bottom Mobile Navigation Bar -->
-  <nav class="bottom-nav">
+  <nav class="bottom-nav" aria-label="Primary Navigation">
     <button class="nav-item active" data-nav="dashboard" onclick="navigate('dashboard')">
-      <span class="nav-icon">📊</span>
+      <span class="nav-icon">🏠</span>
       <span class="nav-text">Home</span>
     </button>
     <button class="nav-item" data-nav="live-scorer" onclick="navigate('live-scorer')">
-      <span class="nav-icon">⚡</span>
+      <span class="nav-icon-wrap">
+        <span class="nav-icon">⚡</span>
+        <span id="navLiveMatchDot" class="nav-live-beacon" style="display:none;" aria-hidden="true"></span>
+      </span>
       <span class="nav-text">Scorer</span>
+    </button>
+    <button class="nav-item nav-item-center" data-nav="create-match" onclick="navigate('create-match')" aria-label="Start New Match">
+      <span class="nav-center-fab">＋</span>
+      <span class="nav-text">New</span>
     </button>
     <button class="nav-item" data-nav="tournaments" onclick="navigate('tournaments')">
       <span class="nav-icon">🏆</span>
       <span class="nav-text">Leagues</span>
     </button>
-    <button class="nav-item" data-nav="create-match" onclick="navigate('create-match')">
-      <span class="nav-icon">＋</span>
-      <span class="nav-text">New</span>
-    </button>
-    <button class="nav-item" data-nav="teams" onclick="navigate('teams')">
-      <span class="nav-icon">🛡️</span>
-      <span class="nav-text">Teams</span>
-    </button>
-    <button class="nav-item" data-nav="players" onclick="navigate('players')">
-      <span class="nav-icon">👤</span>
-      <span class="nav-text">Players</span>
-    </button>
-    <button class="nav-item" data-nav="history" onclick="navigate('history')">
-      <span class="nav-icon">📜</span>
-      <span class="nav-text">History</span>
-    </button>
-    <button class="nav-item" data-nav="statistics" onclick="navigate('statistics')">
-      <span class="nav-icon">📈</span>
-      <span class="nav-text">Stats</span>
-    </button>
-    <button class="nav-item" data-nav="settings" onclick="navigate('settings')">
-      <span class="nav-icon">⚙️</span>
-      <span class="nav-text">Settings</span>
+    <button class="nav-item" data-nav="more" id="navMoreBtn" onclick="toggleMoreNavSheet()">
+      <span class="nav-icon">☰</span>
+      <span class="nav-text">More</span>
     </button>
   </nav>
+
+  <!-- Slide-Up "More" Navigation Drawer (Teams, Players, History, Stats, Settings, Cloud Sync) -->
+  <div id="moreNavBackdrop" class="more-nav-backdrop" onclick="closeMoreNavSheet()"></div>
+  <aside id="moreNavSheet" class="more-nav-sheet" aria-label="More Navigation Options" aria-hidden="true">
+    <div class="more-sheet-handle" onclick="closeMoreNavSheet()"></div>
+    <div class="more-sheet-header">
+      <div>
+        <div class="eyebrow" style="margin-bottom:2px;">CRICSCORER HUB</div>
+        <h3 style="font-size:16px; font-weight:900; margin:0;">Quick Navigation</h3>
+      </div>
+      <button type="button" class="icon-btn" style="width:30px; height:30px; font-size:16px;" onclick="closeMoreNavSheet()" aria-label="Close menu">&times;</button>
+    </div>
+    <div class="more-sheet-grid">
+      <button type="button" class="more-tile-btn" data-more-nav="teams" onclick="navigateFromMoreSheet('teams')">
+        <span class="more-tile-icon">🛡️</span>
+        <span class="more-tile-title">Teams</span>
+        <span class="more-tile-sub">Clubs &amp; squads</span>
+      </button>
+      <button type="button" class="more-tile-btn" data-more-nav="players" onclick="navigateFromMoreSheet('players')">
+        <span class="more-tile-icon">👤</span>
+        <span class="more-tile-title">Players</span>
+        <span class="more-tile-sub">Player pool</span>
+      </button>
+      <button type="button" class="more-tile-btn" data-more-nav="history" onclick="navigateFromMoreSheet('history')">
+        <span class="more-tile-icon">📜</span>
+        <span class="more-tile-title">History</span>
+        <span class="more-tile-sub">Scorecards &amp; posters</span>
+      </button>
+      <button type="button" class="more-tile-btn" data-more-nav="statistics" onclick="navigateFromMoreSheet('statistics')">
+        <span class="more-tile-icon">📈</span>
+        <span class="more-tile-title">Stats</span>
+        <span class="more-tile-sub">Career records</span>
+      </button>
+      <button type="button" class="more-tile-btn" data-more-nav="settings" onclick="navigateFromMoreSheet('settings')">
+        <span class="more-tile-icon">⚙️</span>
+        <span class="more-tile-title">Settings</span>
+        <span class="more-tile-sub">Theme &amp; backups</span>
+      </button>
+      <button type="button" class="more-tile-btn" onclick="closeMoreNavSheet(); handleCloudAuthHeaderClick();">
+        <span class="more-tile-icon">☁️</span>
+        <span class="more-tile-title">Cloud Sync</span>
+        <span class="more-tile-sub" id="moreSheetCloudSub">Account &amp; live feed</span>
+      </button>
+    </div>
+  </aside>
 
   <!-- Universal Modal Dialog for Forms & Scorecards -->
   <dialog id="appModal">

@@ -471,10 +471,59 @@ function getSavedActiveTab() {
   return 'dashboard';
 }
 
+const PRIMARY_DOCK_TABS = ['dashboard', 'live-scorer', 'create-match', 'tournaments'];
+
+function toggleMoreNavSheet() {
+  const sheet = document.getElementById('moreNavSheet');
+  const backdrop = document.getElementById('moreNavBackdrop');
+  if (!sheet || !backdrop) return;
+  const isOpen = sheet.classList.contains('open');
+  if (isOpen) {
+    closeMoreNavSheet();
+  } else {
+    sheet.classList.add('open');
+    sheet.setAttribute('aria-hidden', 'false');
+    backdrop.classList.add('open');
+  }
+}
+
+function closeMoreNavSheet() {
+  const sheet = document.getElementById('moreNavSheet');
+  const backdrop = document.getElementById('moreNavBackdrop');
+  if (sheet) {
+    sheet.classList.remove('open');
+    sheet.setAttribute('aria-hidden', 'true');
+  }
+  if (backdrop) backdrop.classList.remove('open');
+}
+
+function navigateFromMoreSheet(tabId) {
+  closeMoreNavSheet();
+  navigate(tabId);
+}
+
+function updateBottomNavLiveBeacon() {
+  const dot = document.getElementById('navLiveMatchDot');
+  if (!dot) return;
+  const hasLive = !!(activeMatch && activeMatch.status === 'Live');
+  dot.style.display = hasLive ? 'inline-block' : 'none';
+}
+
 function navigate(tabId, options = {}) {
   const targetTab = VALID_TABS.includes(tabId) ? tabId : 'dashboard';
+  closeMoreNavSheet();
   document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === targetTab));
-  document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.nav === targetTab));
+
+  const isSecondaryDockTab = !PRIMARY_DOCK_TABS.includes(targetTab) && targetTab !== 'watch-live' && targetTab !== 'watch-tournament';
+  document.querySelectorAll('.nav-item').forEach(b => {
+    const navKey = b.dataset.nav;
+    const isActive = navKey === 'more' ? isSecondaryDockTab : (navKey === targetTab);
+    b.classList.toggle('active', isActive);
+  });
+  document.querySelectorAll('.more-tile-btn').forEach(tile => {
+    tile.classList.toggle('active', tile.dataset.moreNav === targetTab);
+  });
+  updateBottomNavLiveBeacon();
 
   persistActiveTab(targetTab);
 
@@ -528,6 +577,11 @@ async function renderDashboard() {
   if (playerCountEl) playerCountEl.textContent = players.length;
   const completedCountEl = document.getElementById('statCompletedMatches');
   if (completedCountEl) completedCountEl.textContent = completedCount;
+  const navDot = document.getElementById('navLiveMatchDot');
+  if (navDot) {
+    const anyLiveMatch = matches.some(m => m.status === 'Live');
+    navDot.style.display = anyLiveMatch ? 'inline-block' : 'none';
+  }
 
   try {
     const tourns = await getAllTournaments();
