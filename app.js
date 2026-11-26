@@ -1680,8 +1680,18 @@ async function renderLiveScorerView() {
   const nonStrikerStats = stats.batters.find(b => b.id === nonStriker?.id) || { runs: 0, balls: 0, fours: 0, sixes: 0, strikeRate: '0.0' };
   const bowlerStats = stats.bowlers.find(b => b.id === bowler?.id) || { oversFormatted: '0.0', runsConceded: 0, wickets: 0, economy: '0.00' };
 
-  // Current over balls (last deliveries of current over)
+  // Current over balls & runs tally
   const recentBalls = inn.balls.slice(-8);
+  const currentOverLegalStart = Math.floor(stats.legalDeliveries / 6) * 6;
+  let runningLegal = 0;
+  let thisOverRuns = 0;
+  (inn.balls || []).forEach(b => {
+    const isLegal = b.extraType !== 'wide' && b.extraType !== 'noBall' && b.extraType !== 'penalty';
+    if (runningLegal >= currentOverLegalStart) {
+      thisOverRuns += (b.batRuns || 0) + (b.extraRuns || 0);
+    }
+    if (isLegal) runningLegal += 1;
+  });
 
   // Available batters & bowlers for dropdown selection (Alphabetical A-Z)
   const dismissedIds = new Set(stats.fallOfWickets.map(f => f.playerId || ''));
@@ -1719,6 +1729,30 @@ async function renderLiveScorerView() {
         <div class="win-prob-track">
           <div class="win-prob-fill-bat" style="width:${batWinPct}%;"></div>
           <div class="win-prob-fill-bowl" style="width:${bowlWinPct}%;"></div>
+        </div>
+      </div>
+    `;
+  }
+
+  let chaseBarHTML = '';
+  if (activeMatch.target) {
+    const totalMaxBallsChase = (activeMatch.overs || 20) * 6;
+    const ballsLeftChase = Math.max(0, totalMaxBallsChase - stats.legalDeliveries);
+    const runsNeededChase = Math.max(0, activeMatch.target - stats.totalRuns);
+    const rrrChase = ballsLeftChase > 0 ? (runsNeededChase / (ballsLeftChase / 6)) : 0;
+    const pctDone = Math.min(100, Math.max(4, Math.round((stats.totalRuns / Math.max(1, activeMatch.target)) * 100)));
+    const pressureCls = runsNeededChase === 0 ? 'ahead' : rrrChase <= 8.5 ? 'ahead' : rrrChase <= 11.5 ? 'balanced' : 'pressure';
+    const statusText = runsNeededChase === 0
+      ? `🎉 Target of ${activeMatch.target} achieved!`
+      : `Need <strong>${runsNeededChase}</strong> run${runsNeededChase === 1 ? '' : 's'} in <strong>${ballsLeftChase}</strong> ball${ballsLeftChase === 1 ? '' : 's'} · RRR <strong>${rrrChase.toFixed(2)}</strong>`;
+    chaseBarHTML = `
+      <div class="chase-bar-box">
+        <div class="chase-bar-top">
+          <span>${statusText}</span>
+          <span style="color:var(--primary);">${pctDone}%</span>
+        </div>
+        <div class="chase-bar-track">
+          <div class="chase-bar-fill ${pressureCls}" style="width:${pctDone}%;"></div>
         </div>
       </div>
     `;
@@ -1790,9 +1824,12 @@ async function renderLiveScorerView() {
         <span>${phaseLabel}</span>
         <span style="font-size:10px; font-weight:800; color:var(--primary); background:var(--primary-glow); border:1px solid var(--primary); padding:2px 7px; border-radius:20px;">Extras: ${stats.extras.total || 0} (wd ${stats.extras.wide || 0}, nb ${stats.extras.noBall || 0}, b ${stats.extras.bye || 0}, lb ${stats.extras.legBye || 0}${(stats.extras.penalty || 0) > 0 ? `, pen ${stats.extras.penalty}` : ''})</span>
       </div>
+      ${chaseBarHTML}
       ${winProbHTML}
     </div>
 
+    <div class="scorer-desktop-split">
+    <div class="scorer-split-col">
     <!-- Live Match Insights -->
     <div class="insights-box">
       <div class="insights-header">
@@ -1911,15 +1948,21 @@ async function renderLiveScorerView() {
       </div>
     </div>
 
+    </div>
+    <div class="scorer-split-col">
     <!-- Over Timeline Strip -->
     <div class="card" style="padding:10px 14px;">
-      <div class="eyebrow" style="margin-bottom:4px;">Recent Deliveries</div>
+      <div class="over-timeline-header">
+        <div class="eyebrow" style="margin:0;">Recent Deliveries</div>
+        <span class="over-runs-badge">This Over: ${thisOverRuns} run${thisOverRuns === 1 ? '' : 's'}</span>
+      </div>
       <div class="timeline-strip">
-        ${recentBalls.length ? recentBalls.map(b => `
-          <div class="timeline-ball ${b.batRuns === 4 ? 'four' : b.batRuns === 6 ? 'six' : b.wicket ? 'wicket' : b.extraType ? 'extra' : ''}">
-            ${b.wicket ? 'W' : b.extraType ? b.extraType.slice(0,2).toUpperCase() : b.batRuns}
-          </div>
-        `).join('') : '<span class="muted" style="font-size:12px;">Over in progress...</span>'}
+        ${recentBalls.length ? recentBalls.map(b => {
+          const isDot = !b.wicket && !b.extraType && (b.batRuns || 0) === 0;
+          const cls = b.batRuns === 4 ? 'four' : b.batRuns === 6 ? 'six' : b.wicket ? 'wicket' : b.extraType ? 'extra' : isDot ? 'dot' : '';
+          const lbl = b.wicket ? 'W' : b.extraType ? b.extraType.slice(0,2).toUpperCase() : isDot ? '·' : b.batRuns;
+          return `<div class="timeline-ball ${cls}">${lbl}</div>`;
+        }).join('') : '<span class="muted" style="font-size:12px;">Over in progress...</span>'}
       </div>
     </div>
 
@@ -1956,6 +1999,8 @@ async function renderLiveScorerView() {
         ${activeMatch.format === 'Test' ? `<button class="btn btn-secondary" onclick="endInningsPrompt(true)">Declare</button>` : ''}
         <button class="btn btn-primary" onclick="finishMatchPrompt()">Finish</button>
       </div>
+    </div>
+    </div>
     </div>
   `;
 }
@@ -5920,6 +5965,10 @@ async function refreshPublicLiveCenter(manual = false) {
   if (!sbClient || !navigator.onLine) {
     container.innerHTML = `<div class="empty-state" style="padding:12px;">Connect to the internet to browse public live matches from all scorers.</div>`;
     return;
+  }
+
+  if (manual || !publicFeedMatchesCache.length) {
+    container.innerHTML = `<div class="skeleton-shimmer-card"></div><div class="skeleton-shimmer-card"></div>`;
   }
 
   try {

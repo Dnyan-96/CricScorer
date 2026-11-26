@@ -4106,3 +4106,167 @@ body[data-theme="light"] .nav-center-fab {
 #toastNotification {
   bottom: calc(80px + env(safe-area-inset-bottom, 0px));
 }
+
+
+/* ==========================================
+   V2.33 CHASE BAR, LIVE TICKER, SHIMMER & DESKTOP SPLIT LAYOUT
+   ========================================== */
+
+.chase-bar-box {
+  margin-top: 10px;
+  padding: 9px 11px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.24);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+body[data-theme="light"] .chase-bar-box {
+  background: rgba(15, 23, 42, 0.04);
+  border-color: rgba(15, 23, 42, 0.1);
+}
+
+.chase-bar-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 850;
+  margin-bottom: 6px;
+}
+
+.chase-bar-track {
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+body[data-theme="light"] .chase-bar-track {
+  background: rgba(15, 23, 42, 0.12);
+}
+
+.chase-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.35s ease, background 0.35s ease;
+}
+
+.chase-bar-fill.ahead {
+  background: linear-gradient(90deg, #10b981, #34d399);
+}
+
+.chase-bar-fill.balanced {
+  background: linear-gradient(90deg, #f59e0b, #fbbf24);
+}
+
+.chase-bar-fill.pressure {
+  background: linear-gradient(90deg, #ef4444, #f97316);
+}
+
+/* Over Timeline Header & Dot Ball Styling */
+.over-timeline-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.over-runs-badge {
+  font-size: 10.5px;
+  font-weight: 850;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--primary-glow);
+  color: var(--primary);
+  border: 1px solid rgba(0, 230, 118, 0.35);
+}
+
+.timeline-ball.dot {
+  opacity: 0.72;
+  font-weight: 900;
+}
+
+.timeline-ball.four {
+  background: rgba(56, 189, 248, 0.22);
+  border-color: #38bdf8;
+  color: #38bdf8;
+}
+
+.timeline-ball.six {
+  background: rgba(0, 230, 118, 0.22);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+/* Horizontal Snap-Scroll Public Live Ticker & Skeleton Shimmer */
+.public-live-ticker-row {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding-bottom: 6px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.public-live-ticker-row > .public-match-card {
+  flex: 0 0 278px;
+  scroll-snap-align: start;
+}
+
+.public-live-ticker-row > .empty-state {
+  flex: 1 1 100%;
+}
+
+.skeleton-shimmer-card {
+  flex: 0 0 265px;
+  height: 104px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: linear-gradient(
+    90deg,
+    var(--bg-card) 25%,
+    rgba(0, 230, 118, 0.08) 50%,
+    var(--bg-card) 75%
+  );
+  background-size: 200% 100%;
+  animation: cricSkeletonShimmer 1.35s infinite linear;
+}
+
+@keyframes cricSkeletonShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Desktop & Wide-Screen Split-View Layout (>=960px) */
+@media (min-width: 960px) {
+  main {
+    max-width: 1120px;
+    padding: 20px 24px;
+  }
+
+  .scorer-desktop-split {
+    display: grid;
+    grid-template-columns: 1.08fr 0.92fr;
+    gap: 16px;
+    align-items: start;
+  }
+
+  .scorer-split-col {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .bottom-nav {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    bottom: 12px;
+    width: min(560px, 92vw);
+    border-radius: 22px;
+    border: 1px solid rgba(0, 230, 118, 0.28);
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.45);
+  }
+}
