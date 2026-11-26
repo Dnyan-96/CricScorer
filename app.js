@@ -1828,6 +1828,42 @@ async function renderLiveScorerView() {
       ${winProbHTML}
     </div>
 
+    <!-- High-Contrast Match-Day Tools 3-Tile Control Bar -->
+    <div class="matchday-tools-card">
+      <div class="mdt-header-row">
+        <span class="mdt-header-title">🛠️ Match-Day Tools</span>
+        <span class="muted" style="font-size:10px; font-weight:700;">Tap to configure</span>
+      </div>
+      <div class="mdt-grid-3">
+        <button type="button" class="mdt-tile-btn pin-tile" onclick="openCoScorerPinModal()">
+          <div class="mdt-tile-top">
+            <span class="mdt-tile-icon">🔑</span>
+            <span class="mdt-tile-badge">${activeMatch.handoverPin ? activeMatch.handoverPin : '4-PIN'}</span>
+          </div>
+          <span class="mdt-tile-title">Share PIN</span>
+          <span class="mdt-tile-sub">Co-scorer handover</span>
+        </button>
+
+        <button type="button" class="mdt-tile-btn dls-tile" onclick="openDlsRevisionModal()">
+          <div class="mdt-tile-top">
+            <span class="mdt-tile-icon">🌧️</span>
+            <span class="mdt-tile-badge">${matchOvers} OV</span>
+          </div>
+          <span class="mdt-tile-title">DLS / Overs</span>
+          <span class="mdt-tile-sub">Rain target &amp; overs</span>
+        </button>
+
+        <button type="button" class="mdt-tile-btn wheel-tile ${shotWheelEnabled ? 'active' : ''}" onclick="toggleShotWheelPreference(!shotWheelEnabled)">
+          <div class="mdt-tile-top">
+            <span class="mdt-tile-icon">🎯</span>
+            <span class="mdt-tile-badge">${shotWheelEnabled ? 'ON' : 'OFF'}</span>
+          </div>
+          <span class="mdt-tile-title">Shot Wheel</span>
+          <span class="mdt-tile-sub">${shotWheelEnabled ? 'ON · Boundary map' : 'Tap to enable 4/6'}</span>
+        </button>
+      </div>
+    </div>
+
     <div class="scorer-desktop-split">
     <div class="scorer-split-col">
     <!-- Live Match Insights -->
@@ -2000,11 +2036,7 @@ async function renderLiveScorerView() {
         <button class="btn btn-primary" onclick="finishMatchPrompt()">Finish</button>
       </div>
 
-      <div class="matchday-tools-strip">
-        <button type="button" class="matchday-tool-chip" onclick="openCoScorerPinModal()">🔑 Handover PIN${activeMatch.handoverPin ? `: ${activeMatch.handoverPin}` : ''}</button>
-        <button type="button" class="matchday-tool-chip" onclick="openDlsRevisionModal()">🌧️ DLS / Revise Overs</button>
-        <button type="button" class="matchday-tool-chip ${shotWheelEnabled ? 'active' : ''}" onclick="toggleShotWheelPreference(!shotWheelEnabled)">🎯 Shot Wheel: ${shotWheelEnabled ? 'ON' : 'OFF'}</button>
-      </div>
+
     </div>
     </div>
     </div>
@@ -6909,21 +6941,99 @@ recordBallEvent = async function(runs) {
   }
 };
 
+const RADIAL_WHEEL_SECTORS = [
+  { id: 'long_off', label: 'Long-Off', startDeg: -22.5, endDeg: 22.5 },
+  { id: 'cover', label: 'Cover', startDeg: 22.5, endDeg: 67.5 },
+  { id: 'point', label: 'Point', startDeg: 67.5, endDeg: 112.5 },
+  { id: 'third_man', label: 'Third Man', startDeg: 112.5, endDeg: 157.5 },
+  { id: 'fine_leg', label: 'Fine Leg', startDeg: 157.5, endDeg: 202.5 },
+  { id: 'square_leg', label: 'Square Leg', startDeg: 202.5, endDeg: 247.5 },
+  { id: 'mid_wicket', label: 'Mid-Wicket', startDeg: 247.5, endDeg: 292.5 },
+  { id: 'long_on', label: 'Long-On', startDeg: 292.5, endDeg: 337.5 }
+];
+
+function polarToCartesianWheel(cx, cy, r, angleDeg) {
+  const rad = ((angleDeg - 90) * Math.PI) / 180;
+  return {
+    x: cx + r * Math.cos(rad),
+    y: cy + r * Math.sin(rad)
+  };
+}
+
+function buildSectorWedgePath(cx, cy, rInner, rOuter, startDeg, endDeg) {
+  const p1 = polarToCartesianWheel(cx, cy, rOuter, startDeg);
+  const p2 = polarToCartesianWheel(cx, cy, rOuter, endDeg);
+  const p3 = polarToCartesianWheel(cx, cy, rInner, endDeg);
+  const p4 = polarToCartesianWheel(cx, cy, rInner, startDeg);
+  const largeArc = (endDeg - startDeg) > 180 ? 1 : 0;
+  return [
+    `M ${p1.x.toFixed(1)} ${p1.y.toFixed(1)}`,
+    `A ${rOuter} ${rOuter} 0 ${largeArc} 1 ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`,
+    `L ${p3.x.toFixed(1)} ${p3.y.toFixed(1)}`,
+    `A ${rInner} ${rInner} 0 ${largeArc} 0 ${p4.x.toFixed(1)} ${p4.y.toFixed(1)}`,
+    'Z'
+  ].join(' ');
+}
+
+function previewRadialSectorHover(zoneId, label, midDeg) {
+  const ray = document.getElementById('radialWheelPreviewRay');
+  const txt = document.getElementById('radialWheelSelectedReadout');
+  if (ray) {
+    const endPt = polarToCartesianWheel(150, 150, 128, midDeg);
+    ray.setAttribute('x2', endPt.x.toFixed(1));
+    ray.setAttribute('y2', endPt.y.toFixed(1));
+    ray.setAttribute('opacity', '1');
+  }
+  if (txt) {
+    txt.textContent = `Selected: ${label}`;
+  }
+}
+
 function openShotZonePickerModal(ballId, runs) {
+  const cx = 150;
+  const cy = 150;
+  const rInner = 34;
+  const rOuter = 136;
+  const accentStroke = runs === 6 ? '#00e676' : '#38bdf8';
+
+  const sectorsSVG = RADIAL_WHEEL_SECTORS.map((sec, idx) => {
+    const pathD = buildSectorWedgePath(cx, cy, rInner, rOuter, sec.startDeg, sec.endDeg);
+    const midDeg = (sec.startDeg + sec.endDeg) / 2;
+    const lblPt = polarToCartesianWheel(cx, cy, 94, midDeg);
+    const fillAlt = idx % 2 === 0 ? 'rgba(16, 185, 129, 0.14)' : 'rgba(16, 185, 129, 0.07)';
+    return `
+      <g onclick="assignShotZoneToBall('${ballId}', '${sec.id}')"
+         onmouseenter="previewRadialSectorHover('${sec.id}', '${sec.label}', ${midDeg})">
+        <path class="wagon-sector-wedge" d="${pathD}" fill="${fillAlt}" stroke="rgba(255,255,255,0.22)" stroke-width="1.3" />
+        <text class="wagon-sector-label" x="${lblPt.x.toFixed(1)}" y="${lblPt.y.toFixed(1)}">${escapeHTML(sec.label)}</text>
+      </g>
+    `;
+  }).join('');
+
   const html = `
-    <div class="wagon-wheel-stage">
-      <p class="muted" style="font-size:12px; text-align:center;">Tap where the <strong>${runs}</strong> crossed the rope (or close to skip):</p>
-      <div class="wagon-zone-grid">
-        ${WAGON_WHEEL_ZONES.map(z => `
-          <button type="button" class="wagon-zone-btn" onclick="assignShotZoneToBall('${ballId}', '${z.id}')">
-            <span>${escapeHTML(z.label)}</span>
-            <span style="color:${runs === 6 ? 'var(--primary)' : '#38bdf8'};">${runs}</span>
-          </button>
-        `).join('')}
+    <div class="radial-wheel-modal-wrap">
+      <div class="muted" style="font-size:11.5px; text-align:center;">
+        Tap any slice of the ground where the <strong style="color:${accentStroke};">${runs}</strong> went:
+      </div>
+      <div class="radial-wheel-svg-box">
+        <svg viewBox="0 0 300 300" aria-label="8-Zone Cricket Ground Wagon Wheel">
+          <circle cx="150" cy="150" r="142" fill="#071f17" stroke="${accentStroke}" stroke-width="2.5" />
+          ${sectorsSVG}
+          <circle cx="150" cy="150" r="68" fill="none" stroke="rgba(255,255,255,0.18)" stroke-dasharray="4 4" pointer-events="none" />
+          <line id="radialWheelPreviewRay" x1="150" y1="150" x2="150" y2="30" stroke="${accentStroke}" stroke-width="3.2" stroke-linecap="round" opacity="0" pointer-events="none" />
+          <circle cx="150" cy="150" r="32" fill="#0b1714" stroke="rgba(255,255,255,0.24)" stroke-width="1.5" pointer-events="none" />
+          <rect x="144" y="132" width="12" height="36" rx="2" fill="#d97706" pointer-events="none" />
+          <text x="150" y="125" font-size="8" font-weight="900" fill="#94a3b8" text-anchor="middle" pointer-events="none">BOWLER</text>
+          <text x="150" y="179" font-size="8" font-weight="900" fill="#94a3b8" text-anchor="middle" pointer-events="none">KEEPER</text>
+        </svg>
+      </div>
+      <div class="radial-wheel-footer">
+        <span id="radialWheelSelectedReadout" style="font-size:11.5px; font-weight:800; color:var(--primary);">Tap a ground slice</span>
+        <button type="button" class="btn btn-secondary" style="padding:6px 12px; font-size:11.5px;" onclick="closeModal()">Skip Zone</button>
       </div>
     </div>
   `;
-  openModal(`🎯 ${runs} Runs — Select Shot Zone`, html, null, false);
+  openModal(`🎯 ${runs} Runs — Tap Ground Direction`, html, null, false);
 }
 
 async function assignShotZoneToBall(ballId, zoneId) {
