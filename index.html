@@ -377,8 +377,12 @@
             </div>
 
             <div class="form-group">
-              <label>Venue / Ground</label>
-              <input type="text" id="cmVenue" placeholder="e.g. Oval Sports Ground">
+              <label style="display:flex; justify-content:space-between; align-items:center;">
+                <span>Venue / Ground</span>
+                <button type="button" class="btn-text-action" style="font-size:11px; padding:0;" onclick="navigate('venues-hub')">🏟️ Ground Records →</button>
+              </label>
+              <input type="text" id="cmVenue" list="savedVenuesDatalist" placeholder="e.g. Oval Sports Ground">
+              <datalist id="savedVenuesDatalist"></datalist>
             </div>
           </div>
 
@@ -815,7 +819,27 @@
         <div class="empty-state">Loading squad RSVP &amp; Playing XI builder...</div>
       </div>
     </section>
+
+    <!-- VIEW 13: GROUND / VENUE DIRECTORY & VENUE RECORDS (#venues-hub) -->
+    <section id="venues-hub" class="page">
+      <div class="page-header">
+        <div>
+          <p class="eyebrow">GROUNDS &amp; PITCH HISTORY</p>
+          <h1>Venues &amp; Records</h1>
+        </div>
+        <div style="display:flex; gap:6px;">
+          <button class="btn btn-primary" onclick="openAddVenueModal()">＋ Add Ground</button>
+          <button class="btn btn-secondary" onclick="navigate('dashboard')">← Home</button>
+        </div>
+      </div>
+      <div id="venuesHubContainer">
+        <div class="empty-state">Loading grounds &amp; venue records...</div>
+      </div>
+    </section>
   </main>
+
+  <!-- Dedicated Clean Printable Official Match Sheet (Hidden on screen, shown on @media print) -->
+  <div id="printableMatchSheetRoot" class="print-match-sheet-root" aria-hidden="true"></div>
 
   <!-- Bottom Mobile Navigation Bar -->
   <nav class="bottom-nav" aria-label="Primary Navigation">
@@ -885,6 +909,11 @@
         <span class="more-tile-icon">📋</span>
         <span class="more-tile-title">RSVP &amp; XI</span>
         <span class="more-tile-sub">Lineup &amp; attendance</span>
+      </button>
+      <button type="button" class="more-tile-btn" data-more-nav="venues-hub" onclick="navigateFromMoreSheet('venues-hub')">
+        <span class="more-tile-icon">🏟️</span>
+        <span class="more-tile-title">Venues</span>
+        <span class="more-tile-sub">Grounds &amp; records</span>
       </button>
       <button type="button" class="more-tile-btn" onclick="closeMoreNavSheet(); handleCloudAuthHeaderClick();">
         <span class="more-tile-icon">☁️</span>

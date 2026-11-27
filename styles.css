@@ -5064,3 +5064,171 @@ body[data-theme="light"] .obo-ball-dot {
   gap: 8px;
   font-size: 11.5px;
 }
+
+
+/* ==========================================
+   V2.41 BOWLER SPELL & HAT-TRICK TRACKER, VENUE RECORDS & PRINTABLE MATCH SHEET
+   ========================================== */
+
+.hat-trick-ball-banner {
+  margin-top: 8px;
+  padding: 7px 12px;
+  border-radius: 10px;
+  background: linear-gradient(90deg, rgba(225, 29, 72, 0.24), rgba(245, 158, 11, 0.22));
+  border: 1px solid #fb7185;
+  color: #fecdd3;
+  font-size: 11.5px;
+  font-weight: 950;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  animation: hatTrickPulse 1s infinite alternate;
+}
+
+body[data-theme="light"] .hat-trick-ball-banner {
+  background: linear-gradient(90deg, #ffe4e6, #fef3c7);
+  color: #be123c;
+  border-color: #e11d48;
+}
+
+@keyframes hatTrickPulse {
+  0% { box-shadow: 0 0 0 rgba(225, 29, 72, 0.12); }
+  100% { box-shadow: 0 0 14px rgba(225, 29, 72, 0.45); }
+}
+
+.fx-hat-trick {
+  background: linear-gradient(135deg, rgba(136, 19, 55, 0.96), rgba(180, 83, 9, 0.94));
+  border-color: #fbbf24;
+}
+
+.bowler-spell-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.spell-over-pill {
+  font-size: 10px;
+  font-weight: 850;
+  padding: 3px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-main);
+}
+
+.spell-over-pill.wkt-over {
+  border-color: rgba(244, 63, 94, 0.5);
+  color: #fb7185;
+}
+
+body[data-theme="light"] .spell-over-pill.wkt-over {
+  color: #be123c;
+}
+
+.venue-records-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.venue-record-box {
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface-alt);
+}
+
+.venue-record-box .vr-lbl {
+  font-size: 9.5px;
+  font-weight: 850;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.venue-record-box .vr-val {
+  font-size: 14px;
+  font-weight: 950;
+  color: var(--primary);
+  margin: 2px 0;
+}
+
+.venue-record-box .vr-sub {
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+/* Official Printable Match Sheet (@media print) */
+.print-match-sheet-root {
+  display: none;
+}
+
+@media print {
+  body.printing-official-sheet > *:not(#printableMatchSheetRoot) {
+    display: none !important;
+  }
+
+  body.printing-official-sheet {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  body.printing-official-sheet #printableMatchSheetRoot {
+    display: block !important;
+    width: 100%;
+    padding: 14px 18px;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+
+  .pms-header {
+    border-bottom: 2px solid #0f172a;
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+
+  .pms-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    margin-bottom: 10px;
+  }
+
+  .pms-table th,
+  .pms-table td {
+    border: 1px solid #cbd5e1;
+    padding: 4px 6px;
+    text-align: left;
+  }
+
+  .pms-table th {
+    background: #f1f5f9 !important;
+    font-weight: 800;
+  }
+
+  .pms-sign-row {
+    margin-top: 18px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+    font-size: 11px;
+  }
+
+  .pms-sign-line {
+    border-top: 1px solid #475569;
+    padding-top: 4px;
+    text-align: center;
+    margin-top: 24px;
+  }
+}

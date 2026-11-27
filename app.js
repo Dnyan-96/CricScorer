@@ -441,7 +441,7 @@ class CricketEngine {
 // 3. NAVIGATION & VIEW CONTROLLER (9 SECTIONS)
 // ==========================================
 
-const VALID_TABS = ['dashboard', 'tournaments', 'live-scorer', 'create-match', 'teams', 'players', 'history', 'statistics', 'settings', 'scorecard', 'watch-live', 'watch-tournament', 'broadcast-overlay', 'rsvp-hub'];
+const VALID_TABS = ['dashboard', 'tournaments', 'live-scorer', 'create-match', 'teams', 'players', 'history', 'statistics', 'settings', 'scorecard', 'watch-live', 'watch-tournament', 'broadcast-overlay', 'rsvp-hub', 'venues-hub'];
 
 function persistActiveTab(tabId) {
   if (!VALID_TABS.includes(tabId)) return;
@@ -545,6 +545,7 @@ function navigate(tabId, options = {}) {
   if (targetTab === 'watch-tournament') renderPublicTournamentHub();
   if (targetTab === 'broadcast-overlay') renderBroadcastOverlayView();
   if (targetTab === 'rsvp-hub') renderRsvpHubView();
+  if (targetTab === 'venues-hub') renderVenuesHubView();
   document.body.classList.toggle('obs-overlay-mode', targetTab === 'broadcast-overlay');
   if (targetTab === 'live-scorer') renderLiveScorerView();
   if (targetTab === 'create-match') renderCreateMatchView();
@@ -1086,6 +1087,7 @@ async function renderCreateMatchView() {
   teamASelect.innerHTML = teams.map(t => `<option value="${t.id}">${escapeHTML(t.name)}</option>`).join('');
   teamBSelect.innerHTML = teams.map((t, idx) => `<option value="${t.id}" ${idx === 1 ? 'selected' : ''}>${escapeHTML(t.name)}</option>`).join('');
 
+  populateSavedVenuesDatalist();
   updateTeamDropdowns();
 }
 
@@ -1913,6 +1915,7 @@ async function renderLiveScorerView() {
     </div>
 
     ${buildFreeHitBannerHTML(inn)}
+    ${buildHatTrickBallBannerHTML(inn)}
 
     <!-- High-Contrast Match-Day Tools 4-Tile Control Bar -->
     <div class="matchday-tools-card">
@@ -2323,6 +2326,15 @@ function playNextBroadcastFx() {
         <div class="fx-big-title" style="font-size:23px;">🎳 5-WICKET HAUL!</div>
         <div class="fx-sub-detail">${escapeHTML(ev.bowlerName || 'Bowler')} · ${ev.figures} (${ev.overs} ov)</div>
         <div class="fx-badge-pill">5W🔥 BOWLING BADGE UNLOCKED</div>
+      </div>`;
+  } else if (ev.type === 'HAT_TRICK') {
+    cardHTML = `
+      <div class="fx-card-shell fx-hat-trick">
+        ${buildFxParticlesHTML(['#fbbf24', '#fb7185', '#34d399', '#ffffff'])}
+        <div class="fx-kicker">HISTORIC BOWLING FEAT</div>
+        <div class="fx-big-title" style="font-size:24px;">🎩 HAT-TRICK! 3 IN 3!</div>
+        <div class="fx-sub-detail">${escapeHTML(ev.bowlerName || 'Bowler')} · ${escapeHTML(ev.victimsText || '3 Consecutive Wickets')}</div>
+        <div class="fx-badge-pill">3 WICKETS IN 3 LEGAL BALLS</div>
       </div>`;
   } else if (ev.type === 'ALL_OUT') {
     cardHTML = `
@@ -2880,6 +2892,7 @@ function openWicketModal() {
 
     if (type !== 'runOut' && type !== 'retiredHurt' && type !== 'retiredOut' && type !== 'obstructingTheField' && type !== 'hitBallTwice' && type !== 'timedOut') {
       checkAndQueueBowlerFiveWicketHaul(inn, activeBowlerIdForWicket, prevBowlerWickets);
+      checkAndQueueBowlerHatTrick(inn, activeBowlerIdForWicket);
     }
 
     dbGetAll('teams').then(allT => {
@@ -3478,6 +3491,7 @@ async function viewDetailedScorecard(matchId) {
           <p style="color:var(--primary); font-weight:800; margin-top:5px;">${escapeHTML(m.result || m.status)}</p>
         </div>
         <div style="display:flex; gap:6px; flex-shrink:0; flex-wrap:wrap; justify-content:flex-end;">
+          <button type="button" class="btn btn-secondary" style="font-size:11px; padding:6px 9px; white-space:nowrap;" onclick="printOfficialMatchSheet('${m.id}')">🖨️ Print</button>
           <button type="button" class="btn btn-secondary" style="font-size:11px; padding:6px 9px; white-space:nowrap;" onclick="openRematchClonerModal('${m.id}')">🔁 Rematch</button>
           <button type="button" class="btn btn-secondary" style="font-size:11px; padding:6px 9px; white-space:nowrap;" onclick="openMatchPosterModal('${m.id}')">🖼️ Poster</button>
           <button type="button" class="btn btn-primary" style="font-size:11px; padding:6px 9px; white-space:nowrap;" onclick="shareMatchSummaryText('${m.id}')">📲 Text</button>
@@ -3601,6 +3615,7 @@ async function viewDetailedScorecard(matchId) {
               </tbody>
             </table>
 
+            ${buildBowlerSpellBreakdownHTML(inn)}
             ${buildInningsOverAndPhaseSummaryHTML(inn, m.overs || 20)}
           </div>
         `;
@@ -8697,4 +8712,421 @@ async function checkAndRenderBackupReminderBanner() {
       bar.style.display = 'none';
     }
   } catch (e) {}
+}
+
+
+// ==========================================
+// V2.41: BOWLER SPELL & HAT-TRICK TRACKER, VENUE RECORDS & PRINTABLE MATCH SHEET
+// ==========================================
+const NON_BOWLER_DISMISSALS_V41 = new Set([
+  'runOut', 'retiredHurt', 'retiredOut', 'obstructingTheField', 'hitBallTwice', 'timedOut'
+]);
+
+function getBowlerConsecutiveLegalWickets(inn, bowlerId) {
+  if (!inn || !bowlerId || !Array.isArray(inn.balls)) return [];
+  const bowlerBalls = inn.balls.filter(b => b.bowlerId === bowlerId);
+  const streak = [];
+  for (let i = bowlerBalls.length - 1; i >= 0; i--) {
+    const b = bowlerBalls[i];
+    const isLegal = b.extraType !== 'wide' && b.extraType !== 'noBall' && b.extraType !== 'penalty';
+    if (!isLegal) {
+      // Wide/No-ball without wicket doesn't break a hat-trick unless a non-bowler dismissal happened
+      continue;
+    }
+    if (b.wicket && !NON_BOWLER_DISMISSALS_V41.has(b.dismissal)) {
+      streak.unshift(b);
+    } else {
+      break;
+    }
+  }
+  return streak;
+}
+
+function buildHatTrickBallBannerHTML(inn) {
+  if (!inn || !inn.bowlerId) return '';
+  const streak = getBowlerConsecutiveLegalWickets(inn, inn.bowlerId);
+  if (streak.length !== 2) return '';
+  const bowlerName = (inn.bowlingSquad || []).find(p => p.id === inn.bowlerId)?.name || 'Bowler';
+  return `
+    <div class="hat-trick-ball-banner">
+      <span>🔥 HAT-TRICK BALL! · ${escapeHTML(bowlerName)}</span>
+      <span style="font-size:10px; opacity:0.92;">2 Wickets in 2 Balls</span>
+    </div>
+  `;
+}
+
+function checkAndQueueBowlerHatTrick(inn, bowlerId) {
+  const streak = getBowlerConsecutiveLegalWickets(inn, bowlerId);
+  if (streak.length >= 3 && streak.length % 3 === 0) {
+    const bowlerName = (inn.bowlingSquad || []).find(p => p.id === bowlerId)?.name || 'Bowler';
+    const squadMap = {};
+    (inn.squad || []).forEach(p => { squadMap[p.id] = p.name; });
+    const victimNames = streak.slice(-3).map(b => squadMap[b.wicketPlayerId] || 'Batter');
+    queueBroadcastFx({
+      type: 'HAT_TRICK',
+      bowlerName,
+      victimsText: victimNames.join(', ')
+    });
+  }
+}
+
+function buildBowlerSpellBreakdownHTML(inn) {
+  const balls = inn?.balls || [];
+  if (!balls.length) return '';
+
+  const bowlerSpells = {};
+  let legalCounter = 0;
+
+  balls.forEach(b => {
+    const isLegal = b.extraType !== 'wide' && b.extraType !== 'noBall' && b.extraType !== 'penalty';
+    const ovNum = Math.floor(legalCounter / 6) + 1;
+    if (b.bowlerId) {
+      if (!bowlerSpells[b.bowlerId]) {
+        const bName = (inn.bowlingSquad || []).find(p => p.id === b.bowlerId)?.name || 'Bowler';
+        bowlerSpells[b.bowlerId] = { name: bName, overs: {} };
+      }
+      if (!bowlerSpells[b.bowlerId].overs[ovNum]) {
+        bowlerSpells[b.bowlerId].overs[ovNum] = { ovNum, runs: 0, wkts: 0 };
+      }
+      const conceded = (b.batRuns || 0) + ((b.extraType === 'wide' || b.extraType === 'noBall') ? (b.extraTotal || 1) : 0);
+      bowlerSpells[b.bowlerId].overs[ovNum].runs += conceded;
+      if (b.wicket && !NON_BOWLER_DISMISSALS_V41.has(b.dismissal)) {
+        bowlerSpells[b.bowlerId].overs[ovNum].wkts += 1;
+      }
+    }
+    if (isLegal) legalCounter += 1;
+  });
+
+  const entries = Object.values(bowlerSpells).filter(sp => Object.keys(sp.overs).length > 0);
+  if (!entries.length) return '';
+
+  return `
+    <div style="margin-top:10px; padding-top:8px; border-top:1px dashed var(--border);">
+      <h4 style="font-size:11px; text-transform:uppercase; color:var(--text-muted); margin-bottom:5px;">Bowler Over-by-Over Spells</h4>
+      ${entries.map(sp => {
+        const ovList = Object.values(sp.overs).sort((a, b) => a.ovNum - b.ovNum);
+        return `
+          <div style="margin-bottom:6px;">
+            <div style="font-size:11.5px; font-weight:850;">⚡ ${escapeHTML(sp.name)}</div>
+            <div class="bowler-spell-strip">
+              ${ovList.map(o => `<span class="spell-over-pill ${o.wkts > 0 ? 'wkt-over' : ''}">Ov ${o.ovNum}: ${o.runs}r-${o.wkts}w</span>`).join('')}
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+// ==========================================
+// GROUND / VENUE DIRECTORY & VENUE RECORDS HUB
+// ==========================================
+const CUSTOM_VENUES_KEY = 'cricscorer_custom_venues_v1';
+
+function loadSavedCustomVenues() {
+  try {
+    const raw = localStorage.getItem(CUSTOM_VENUES_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveCustomVenuesList(list) {
+  try {
+    localStorage.setItem(CUSTOM_VENUES_KEY, JSON.stringify(list));
+  } catch (e) {}
+}
+
+async function populateSavedVenuesDatalist() {
+  const dl = document.getElementById('savedVenuesDatalist');
+  if (!dl) return;
+  const matches = await dbGetAll('matches');
+  const names = new Set(loadSavedCustomVenues().map(v => v.name));
+  matches.forEach(m => {
+    if (m.venue && m.venue.trim() && m.venue.trim() !== 'Ground') {
+      names.add(m.venue.trim());
+    }
+  });
+  dl.innerHTML = Array.from(names).sort().map(n => `<option value="${escapeHTML(n)}">`).join('');
+}
+
+function openAddVenueModal() {
+  const html = `
+    <div>
+      <div class="form-group" style="margin-bottom:10px;">
+        <label>Ground / Turf Name *</label>
+        <input type="text" id="newVenueNameInput" placeholder="e.g. Turf Arena, Pune">
+      </div>
+      <div class="field-grid">
+        <div class="form-group">
+          <label>City / Area</label>
+          <input type="text" id="newVenueCityInput" placeholder="e.g. Pune">
+        </div>
+        <div class="form-group">
+          <label>Default Surface</label>
+          <select id="newVenueSurfaceInput">
+            <option value="Astro Turf / Box">Astro Turf / Box</option>
+            <option value="Matting Wicket">Matting Wicket</option>
+            <option value="Natural Turf">Natural Turf</option>
+            <option value="Cement / Gully">Cement / Gully</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  `;
+
+  openModal('🏟️ Add Cricket Ground / Venue', html, async () => {
+    const name = (document.getElementById('newVenueNameInput')?.value || '').trim();
+    if (!name) {
+      alert('Please enter a ground or turf name.');
+      return false;
+    }
+    const city = (document.getElementById('newVenueCityInput')?.value || '').trim();
+    const surface = document.getElementById('newVenueSurfaceInput')?.value || 'Astro Turf / Box';
+    const list = loadSavedCustomVenues();
+    if (!list.some(v => v.name.toLowerCase() === name.toLowerCase())) {
+      list.push({ id: 'venue_' + generateId(), name, city, surface });
+      saveCustomVenuesList(list);
+    }
+    populateSavedVenuesDatalist();
+    showToast(`🏟️ Saved "${name}" to Ground Directory!`);
+    renderVenuesHubView();
+    return true;
+  });
+}
+
+async function renderVenuesHubView() {
+  const container = document.getElementById('venuesHubContainer');
+  if (!container) return;
+
+  const [matches, teams] = await Promise.all([dbGetAll('matches'), dbGetAll('teams')]);
+  const teamsMap = {};
+  teams.forEach(t => { teamsMap[t.id] = t.name; });
+
+  const venuesMap = {};
+  loadSavedCustomVenues().forEach(v => {
+    venuesMap[v.name.toLowerCase()] = {
+      name: v.name,
+      city: v.city || '',
+      surface: v.surface || 'Cricket Ground',
+      matches: []
+    };
+  });
+
+  matches.forEach(m => {
+    const vName = (m.venue || '').trim();
+    if (!vName) return;
+    const key = vName.toLowerCase();
+    if (!venuesMap[key]) {
+      venuesMap[key] = { name: vName, city: '', surface: m.pitchCondition || 'Cricket Ground', matches: [] };
+    }
+    venuesMap[key].matches.push(m);
+  });
+
+  const venueList = Object.values(venuesMap).sort((a, b) => b.matches.length - a.matches.length);
+  if (!venueList.length) {
+    container.innerHTML = `<div class="empty-state">No venues recorded yet. Tap "＋ Add Ground" or enter a venue when creating a match.</div>`;
+    return;
+  }
+
+  container.innerHTML = venueList.map(v => {
+    let highestTotal = { runs: -1, wkts: 0, team: '--', ov: '' };
+    let lowestDefended = { runs: 9999, wkts: 0, team: '--', ov: '' };
+    let topBatter = { name: '--', runs: 0 };
+    let bestBowler = { name: '--', wkts: -1, runs: 999 };
+    const batterTotals = {};
+
+    v.matches.forEach(m => {
+      const innStats = (m.innings || []).map(inn => ({
+        inn,
+        st: CricketEngine.calculateInnings(inn, inn.squad || [], inn.bowlingSquad || [])
+      }));
+
+      innStats.forEach(({ inn, st }) => {
+        const tName = teamsMap[inn.batting] || 'Team';
+        if (st.totalRuns > highestTotal.runs) {
+          highestTotal = { runs: st.totalRuns, wkts: st.wickets, team: tName, ov: st.oversFormatted };
+        }
+        (st.batters || []).forEach(b => {
+          batterTotals[b.name] = (batterTotals[b.name] || 0) + b.runs;
+          if (batterTotals[b.name] > topBatter.runs) {
+            topBatter = { name: b.name, runs: batterTotals[b.name] };
+          }
+        });
+        (st.bowlers || []).forEach(bo => {
+          if (bo.wickets > bestBowler.wkts || (bo.wickets === bestBowler.wkts && bo.runsConceded < bestBowler.runs)) {
+            bestBowler = { name: bo.name, wkts: bo.wickets, runs: bo.runsConceded };
+          }
+        });
+      });
+
+      if (m.status === 'Completed' && innStats.length >= 2) {
+        const s1 = innStats[0].st.totalRuns;
+        const s2 = innStats[1].st.totalRuns;
+        if (s1 > s2 && s1 < lowestDefended.runs) {
+          lowestDefended = {
+            runs: s1,
+            wkts: innStats[0].st.wickets,
+            team: teamsMap[innStats[0].inn.batting] || 'Team',
+            ov: innStats[0].st.oversFormatted
+          };
+        }
+      }
+    });
+
+    return `
+      <div class="card" style="margin-bottom:12px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+          <div>
+            <h3 style="margin:0; font-size:15.5px; font-weight:950;">🏟️ ${escapeHTML(v.name)}</h3>
+            <div class="muted" style="font-size:11.5px; margin-top:2px;">${v.city ? escapeHTML(v.city) + ' · ' : ''}${escapeHTML(v.surface)}</div>
+          </div>
+          <span class="badge badge-completed">${v.matches.length} Match${v.matches.length === 1 ? '' : 'es'}</span>
+        </div>
+
+        <div class="venue-records-grid">
+          <div class="venue-record-box">
+            <div class="vr-lbl">Highest Team Total</div>
+            <div class="vr-val">${highestTotal.runs >= 0 ? `${highestTotal.runs}/${highestTotal.wkts}` : '--'}</div>
+            <div class="vr-sub">${highestTotal.runs >= 0 ? `${escapeHTML(highestTotal.team)} (${highestTotal.ov} ov)` : 'No innings yet'}</div>
+          </div>
+          <div class="venue-record-box">
+            <div class="vr-lbl">Lowest Defended</div>
+            <div class="vr-val">${lowestDefended.runs < 9999 ? `${lowestDefended.runs}/${lowestDefended.wkts}` : '--'}</div>
+            <div class="vr-sub">${lowestDefended.runs < 9999 ? `${escapeHTML(lowestDefended.team)}` : 'No completed defense'}</div>
+          </div>
+          <div class="venue-record-box">
+            <div class="vr-lbl">Venue Top Scorer</div>
+            <div class="vr-val">${topBatter.runs > 0 ? `${topBatter.runs} Runs` : '--'}</div>
+            <div class="vr-sub">${escapeHTML(topBatter.name)}</div>
+          </div>
+          <div class="venue-record-box">
+            <div class="vr-lbl">Best Bowling Figures</div>
+            <div class="vr-val">${bestBowler.wkts >= 0 ? `${bestBowler.wkts}/${bestBowler.runs}` : '--'}</div>
+            <div class="vr-sub">${escapeHTML(bestBowler.name)}</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ==========================================
+// OFFICIAL PRINTABLE MATCH SCORESHEET (@media print)
+// ==========================================
+async function printOfficialMatchSheet(matchId) {
+  const [matches, teams, players] = await Promise.all([
+    dbGetAll('matches'),
+    dbGetAll('teams'),
+    dbGetAll('players')
+  ]);
+  const m = matches.find(x => x.id === matchId);
+  if (!m) return;
+
+  const root = document.getElementById('printableMatchSheetRoot');
+  if (!root) {
+    window.print();
+    return;
+  }
+
+  const playersMap = {};
+  (players || []).forEach(p => { playersMap[p.id] = p.name; });
+  const teamAName = teams.find(t => t.id === m.a)?.name || 'Team A';
+  const teamBName = teams.find(t => t.id === m.b)?.name || 'Team B';
+  const tossWinnerName = teams.find(t => t.id === m.tossWinner)?.name || '';
+
+  const inningsTablesHTML = (m.innings || []).map((inn, idx) => {
+    const st = CricketEngine.calculateInnings(inn, inn.squad || [], inn.bowlingSquad || []);
+    const batTeamName = teams.find(t => t.id === inn.batting)?.name || `Innings ${idx + 1}`;
+    const activeIds = new Set([inn.strikerId, inn.nonStrikerId]);
+    (inn.balls || []).forEach(b => {
+      if (b.batterId) activeIds.add(b.batterId);
+      if (b.nonStrikerId) activeIds.add(b.nonStrikerId);
+      if (b.wicketPlayerId) activeIds.add(b.wicketPlayerId);
+    });
+    const batted = st.batters.filter(b => b.balls > 0 || b.isOut || activeIds.has(b.id));
+    const bowled = st.bowlers.filter(bo => bo.legalBalls > 0 || bo.wides > 0 || bo.noBalls > 0);
+    const fowText = st.fallOfWickets.length
+      ? st.fallOfWickets.map(f => `${f.wicketNum}-${f.score} (${escapeHTML(f.playerName)}, ${f.overs} ov)`).join(', ')
+      : 'None';
+
+    return `
+      <div style="margin-bottom:14px;">
+        <div style="display:flex; justify-content:space-between; font-weight:800; font-size:13px; margin-bottom:4px; background:#e2e8f0; padding:4px 8px;">
+          <span>INNINGS ${idx + 1}: ${escapeHTML(batTeamName.toUpperCase())}</span>
+          <span>${st.totalRuns}/${st.wickets} (${st.oversFormatted} Ov) · Extras: ${st.extras.total}</span>
+        </div>
+        <table class="pms-table">
+          <thead>
+            <tr><th>Batter</th><th>Dismissal</th><th>R</th><th>B</th><th>4s</th><th>6s</th><th>SR</th></tr>
+          </thead>
+          <tbody>
+            ${batted.map(b => `
+              <tr>
+                <td><strong>${escapeHTML(b.name)}</strong>${!b.isOut ? '*' : ''}</td>
+                <td>${escapeHTML(formatDismissalText(b, playersMap, playersMap))}</td>
+                <td><strong>${b.runs}</strong></td>
+                <td>${b.balls}</td>
+                <td>${b.fours}</td>
+                <td>${b.sixes}</td>
+                <td>${b.strikeRate}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        <div style="font-size:10.5px; margin-bottom:6px;"><strong>Fall of Wickets:</strong> ${fowText}</div>
+        <table class="pms-table">
+          <thead>
+            <tr><th>Bowler</th><th>O</th><th>M</th><th>R</th><th>W</th><th>WD</th><th>NB</th><th>ECON</th></tr>
+          </thead>
+          <tbody>
+            ${bowled.map(bo => `
+              <tr>
+                <td><strong>${escapeHTML(bo.name)}</strong></td>
+                <td>${bo.oversFormatted}</td>
+                <td>${bo.maidens || 0}</td>
+                <td>${bo.runsConceded}</td>
+                <td><strong>${bo.wickets}</strong></td>
+                <td>${bo.wides || 0}</td>
+                <td>${bo.noBalls || 0}</td>
+                <td>${bo.economy}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }).join('');
+
+  root.innerHTML = `
+    <div class="pms-header">
+      <div>
+        <div style="font-size:10px; font-weight:800; letter-spacing:1px; color:#047857;">CRICSCORER OFFICIAL MATCH SCORESHEET</div>
+        <h2 style="margin:2px 0; font-size:18px;">${escapeHTML(teamAName)} vs ${escapeHTML(teamBName)}</h2>
+        <div style="font-size:11px; color:#334155;">${escapeHTML(m.title || 'Match')} · ${escapeHTML(m.format || 'T20')} (${m.overs || 20} Overs) · Venue: ${escapeHTML(m.venue || 'Ground')} · Date: ${escapeHTML(m.date || '')}</div>
+        ${tossWinnerName ? `<div style="font-size:11px; color:#334155;">Toss: ${escapeHTML(tossWinnerName)} elected to ${m.tossDecision === 'bowl' ? 'bowl' : 'bat'} first</div>` : ''}
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:12px; font-weight:900; color:#047857;">${escapeHTML(m.result || m.status)}</div>
+      </div>
+    </div>
+
+    ${inningsTablesHTML}
+
+    <div class="pms-sign-row">
+      <div class="pms-sign-line">Captain (${escapeHTML(teamAName)})</div>
+      <div class="pms-sign-line">Captain (${escapeHTML(teamBName)})</div>
+      <div class="pms-sign-line">Official Scorer / Umpire</div>
+    </div>
+  `;
+
+  document.body.classList.add('printing-official-sheet');
+  setTimeout(() => {
+    window.print();
+    setTimeout(() => {
+      document.body.classList.remove('printing-official-sheet');
+    }, 500);
+  }, 100);
 }
