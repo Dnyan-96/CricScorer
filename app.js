@@ -4230,7 +4230,19 @@ function toggleTheme() {
   }
 }
 
+async let hapticsEnabledCache = true;
+try {
+  const savedHapticsFlag = localStorage.getItem('cricscorer_haptics_enabled');
+  if (savedHapticsFlag === '0') hapticsEnabledCache = false;
+} catch (e) {}
+
 async function saveAppSetting(key, val) {
+  if (key === 'haptics') {
+    hapticsEnabledCache = !!val;
+    try {
+      localStorage.setItem('cricscorer_haptics_enabled', hapticsEnabledCache ? '1' : '0');
+    } catch (e) {}
+  }
   if (!db) return;
   try {
     await dbPut('settings', { key, val });
@@ -4255,6 +4267,13 @@ async function loadSavedSettings() {
     if (defaultFormat) {
       const sel = document.getElementById('settingDefaultFormat');
       if (sel) sel.value = defaultFormat;
+    }
+    const hapticsSaved = settings.find(s => s.key === 'haptics')?.val;
+    if (typeof hapticsSaved === 'boolean') {
+      hapticsEnabledCache = hapticsSaved;
+      try {
+        localStorage.setItem('cricscorer_haptics_enabled', hapticsEnabledCache ? '1' : '0');
+      } catch (e) {}
     }
   } catch (e) {
     console.warn('Could not load settings:', e);
@@ -4327,18 +4346,44 @@ async function requestWakeLock() {
   }
 }
 
-function triggerHaptic(type = 'normal') {
-  const hapticSetting = document.getElementById('settingHaptics')?.checked;
-  if (!hapticSetting || !('vibrate' in navigator)) return;
-
-  if (type === 'boundary') {
-    navigator.vibrate([40, 60, 40]);
-  } else if (type === 'wicket') {
-    navigator.vibrate(120);
-  } else {
-    navigator.vibrate(25);
-  }
+function isHapticsEnabled() {
+  const checkbox = document.getElementById('settingHaptics');
+  if (checkbox) return !!checkbox.checked;
+  return !!hapticsEnabledCache;
 }
+
+function triggerHaptic(type = 'normal') {
+  if (!isHapticsEnabled()) return;
+  try {
+    if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+      if (type === 'boundary') {
+        navigator.vibrate([45, 55, 45]);
+      } else if (type === 'wicket') {
+        navigator.vibrate([90, 45, 110]);
+      } else if (type === 'light') {
+        navigator.vibrate(18);
+      } else {
+        navigator.vibrate(28);
+      }
+    }
+  } catch (e) {}
+}
+
+document.addEventListener('pointerdown', (ev) => {
+  const target = ev.target;
+  if (!target || typeof target.closest !== 'function') return;
+  const keyBtn = target.closest('.scoring-keypad-panel button, .bottom-nav .nav-item, .more-tile-btn');
+  if (!keyBtn) return;
+  if (keyBtn.classList.contains('wicket')) {
+    triggerHaptic('wicket');
+  } else if (keyBtn.classList.contains('four') || keyBtn.classList.contains('six')) {
+    triggerHaptic('boundary');
+  } else if (keyBtn.classList.contains('nav-item') || keyBtn.classList.contains('more-tile-btn')) {
+    triggerHaptic('light');
+  } else {
+    triggerHaptic('normal');
+  }
+}, { passive: true });
 
 function handleThemeSwitch(isLight) {
   const targetTheme = isLight ? 'light' : 'dark';
@@ -4360,6 +4405,12 @@ async function renderSettings() {
 
   const shotWheelEl = document.getElementById('settingShotWheel');
   if (shotWheelEl) shotWheelEl.checked = !!shotWheelEnabled;
+  const hapticsSavedObj = settings.find(s => s.key === 'haptics');
+  if (hapticsSavedObj && typeof hapticsSavedObj.val === 'boolean') {
+    hapticsEnabledCache = hapticsSavedObj.val;
+  }
+  const hapticsCheckboxEl = document.getElementById('settingHaptics');
+  if (hapticsCheckboxEl) hapticsCheckboxEl.checked = !!hapticsEnabledCache;
   const teamsEl = document.getElementById('dbCountTeams');
   if (teamsEl) teamsEl.textContent = teams.length;
   const playersEl = document.getElementById('dbCountPlayers');
