@@ -4230,7 +4230,7 @@ function toggleTheme() {
   }
 }
 
-async let hapticsEnabledCache = true;
+let hapticsEnabledCache = true;
 try {
   const savedHapticsFlag = localStorage.getItem('cricscorer_haptics_enabled');
   if (savedHapticsFlag === '0') hapticsEnabledCache = false;
