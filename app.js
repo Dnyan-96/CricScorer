@@ -573,6 +573,7 @@ function buildHomeTeamShieldSVG(teamName, variant = 'a') {
 }
 
 async function renderDashboard() {
+  checkAndRenderBackupReminderBanner();
   const [teams, players, matches] = await Promise.all([
     dbGetAll('teams'), dbGetAll('players'), dbGetAll('matches')
   ]);
@@ -716,7 +717,7 @@ function createMatchItemHTML(m, teams) {
       </div>
       <div class="item-actions">
         ${isLive ? `<button class="btn btn-primary" style="font-size:12px; padding:7px 13px;" onclick="resumeMatch('${m.id}')">▶ Resume</button>` : ''}
-        ${m.status === 'Completed' ? `<button class="btn btn-secondary" style="font-size:12px; padding:7px 10px;" onclick="viewDetailedScorecard('${m.id}')">Scorecard</button><button class="btn btn-primary" style="font-size:12px; padding:7px 10px;" onclick="openMatchPosterModal('${m.id}')" title="Generate 1080x1080 Match Poster">🖼️</button>` : ''}
+        ${m.status === 'Completed' ? `<button class="btn btn-secondary" style="font-size:12px; padding:7px 10px;" onclick="viewDetailedScorecard('${m.id}')">Scorecard</button><button class="btn btn-secondary" style="font-size:12px; padding:7px 9px;" onclick="openRematchClonerModal('${m.id}')" title="1-Tap Rematch">🔁</button><button class="btn btn-primary" style="font-size:12px; padding:7px 10px;" onclick="openMatchPosterModal('${m.id}')" title="Generate 1080x1080 Match Poster">🖼️</button>` : ''}
         ${m.status === 'Upcoming' ? `<button class="btn btn-primary" style="font-size:12px; padding:7px 12px;" onclick="resumeMatch('${m.id}')">Start</button>` : ''}
         <button class="btn btn-outline" style="font-size:12px; padding:7px 9px;" onclick="deleteMatchPrompt('${m.id}')" title="Delete Match">⋮</button>
       </div>
@@ -1149,6 +1150,7 @@ function filterSquadLists(query) {
 }
 
 function renderSquadLists() {
+  renderSquadPresetsToolbar();
   const listA = document.getElementById('squadListA');
   const listB = document.getElementById('squadListB');
   if (!listA || !listB) return;
@@ -3475,7 +3477,8 @@ async function viewDetailedScorecard(matchId) {
           ${tossSummary ? `<p class="muted" style="font-size:11px; margin-top:3px;">🪙 ${tossSummary}</p>` : ''}
           <p style="color:var(--primary); font-weight:800; margin-top:5px;">${escapeHTML(m.result || m.status)}</p>
         </div>
-        <div style="display:flex; gap:6px; flex-shrink:0;">
+        <div style="display:flex; gap:6px; flex-shrink:0; flex-wrap:wrap; justify-content:flex-end;">
+          <button type="button" class="btn btn-secondary" style="font-size:11px; padding:6px 9px; white-space:nowrap;" onclick="openRematchClonerModal('${m.id}')">🔁 Rematch</button>
           <button type="button" class="btn btn-secondary" style="font-size:11px; padding:6px 9px; white-space:nowrap;" onclick="openMatchPosterModal('${m.id}')">🖼️ Poster</button>
           <button type="button" class="btn btn-primary" style="font-size:11px; padding:6px 9px; white-space:nowrap;" onclick="shareMatchSummaryText('${m.id}')">📲 Text</button>
         </div>
@@ -3597,6 +3600,8 @@ async function viewDetailedScorecard(matchId) {
                 `).join('')}
               </tbody>
             </table>
+
+            ${buildInningsOverAndPhaseSummaryHTML(inn, m.overs || 20)}
           </div>
         `;
       }).join('')}
@@ -6937,16 +6942,7 @@ function updateSyncStatusPill(queuedCount = 0) {
 }
 
 function handleSyncStatusPillClick() {
-  if (!currentCloudUser) {
-    openCloudAuthModal();
-    return;
-  }
-  if (!navigator.onLine) {
-    showToast('Offline at ground — your scores are safely saved in IndexedDB and will auto-sync once back online.');
-    return;
-  }
-  flushCloudSyncQueue(false);
-  syncAllLocalDataToCloud(false);
+  openSyncQueueInspectorModal();
 }
 
 // Wrap queueCloudMatchSync so offline updates are always persisted in IndexedDB queue
@@ -8383,4 +8379,322 @@ async function generatePlayingXiPosterModal(teamId) {
     </div>
   `;
   openModal(`🪪 ${team.name} — Playing XI Lineup Card`, html, null, false);
+}
+
+
+// ==========================================
+// V2.40: 1-TAP REMATCH, SQUAD PRESETS, OVER-BY-OVER & SYNC QUEUE INSPECTOR
+// ==========================================
+const SQUAD_PRESETS_KEY = 'cricscorer_squad_presets_v1';
+const LAST_JSON_EXPORT_KEY = 'cricscorer_last_json_export_count';
+
+function loadSavedSquadPresets() {
+  try {
+    const raw = localStorage.getItem(SQUAD_PRESETS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveSquadPresetsList(list) {
+  try {
+    localStorage.setItem(SQUAD_PRESETS_KEY, JSON.stringify(list));
+  } catch (e) {}
+}
+
+function renderSquadPresetsToolbar() {
+  const bar = document.getElementById('squadPresetsToolbar');
+  if (!bar) return;
+  const presets = loadSavedSquadPresets();
+  bar.innerHTML = `
+    <span class="muted" style="font-size:11px; font-weight:800;">⚡ Squad Presets:</span>
+    ${presets.map(pr => `
+      <span class="preset-chip-btn">
+        <span onclick="applySquadPreset('${pr.id}')">📋 ${escapeHTML(pr.name)} (${(pr.teamAIds?.length || 0)}v${(pr.teamBIds?.length || 0)})</span>
+        <span onclick="deleteSquadPreset('${pr.id}')" style="opacity:0.65; margin-left:3px;" title="Delete Preset">&times;</span>
+      </span>
+    `).join('')}
+    <button type="button" class="preset-chip-btn" style="border-style:dashed;" onclick="promptSaveCurrentSquadPreset()">＋ Save Current Lineups</button>
+  `;
+}
+
+function promptSaveCurrentSquadPreset() {
+  if (selectedSquadA.size < 2 || selectedSquadB.size < 2) {
+    alert('Select at least 2 players in both Team A and Team B before saving a preset.');
+    return;
+  }
+  const name = prompt('Enter a name for this squad preset (e.g., Sunday Turf XI):', 'Sunday Turf XI');
+  if (!name || !name.trim()) return;
+  const list = loadSavedSquadPresets();
+  list.push({
+    id: 'preset_' + generateId(),
+    name: name.trim(),
+    teamAIds: Array.from(selectedSquadA),
+    teamBIds: Array.from(selectedSquadB)
+  });
+  saveSquadPresetsList(list);
+  renderSquadPresetsToolbar();
+  showToast(`📋 Saved squad preset "${name.trim()}"!`);
+}
+
+function applySquadPreset(presetId) {
+  const preset = loadSavedSquadPresets().find(p => p.id === presetId);
+  if (!preset) return;
+  const validIds = new Set(cachedSquadPlayers.map(p => p.id));
+  selectedSquadA = new Set((preset.teamAIds || []).filter(id => validIds.has(id)));
+  selectedSquadB = new Set((preset.teamBIds || []).filter(id => validIds.has(id) && !selectedSquadA.has(id)));
+  renderSquadLists();
+  if (typeof updateSquadCounters === 'function') updateSquadCounters();
+  showToast(`⚡ Loaded preset "${preset.name}"`);
+}
+
+function deleteSquadPreset(presetId) {
+  const list = loadSavedSquadPresets().filter(p => p.id !== presetId);
+  saveSquadPresetsList(list);
+  renderSquadPresetsToolbar();
+  showToast('Squad preset removed');
+}
+
+async function openRematchClonerModal(sourceMatchId) {
+  const [matches, teams] = await Promise.all([dbGetAll('matches'), dbGetAll('teams')]);
+  const src = matches.find(m => m.id === sourceMatchId);
+  if (!src) return;
+
+  const teamAName = teams.find(t => t.id === src.a)?.name || 'Team A';
+  const teamBName = teams.find(t => t.id === src.b)?.name || 'Team B';
+  const inn1 = src.innings?.[0];
+  const squadACount = inn1 ? (inn1.batting === src.a ? (inn1.squad?.length || 0) : (inn1.bowlingSquad?.length || 0)) : 0;
+  const squadBCount = inn1 ? (inn1.batting === src.b ? (inn1.squad?.length || 0) : (inn1.bowlingSquad?.length || 0)) : 0;
+
+  const html = `
+    <div>
+      <div class="card" style="margin-bottom:10px; padding:10px 12px;">
+        <div class="eyebrow" style="margin-bottom:2px;">CLONING FIXTURE &amp; LINEUPS</div>
+        <div style="font-size:14px; font-weight:900;">${escapeHTML(teamAName)} vs ${escapeHTML(teamBName)}</div>
+        <div class="muted" style="font-size:11.5px; margin-top:2px;">${escapeHTML(src.format || 'T20')} (${src.overs || 20} ov) · ${escapeHTML(src.venue || 'Ground')} · ${squadACount}v${squadBCount} players</div>
+      </div>
+
+      <div class="form-group" style="margin-bottom:10px;">
+        <label>Rematch Title *</label>
+        <input type="text" id="rematchTitleInput" value="${escapeHTML((src.title || `${teamAName} vs ${teamBName}`) + ' — Rematch')}">
+      </div>
+
+      <div class="form-group" style="margin-bottom:10px;">
+        <label>Who Bats First in Rematch?</label>
+        <select id="rematchBatFirstSel">
+          <option value="swap" selected>🔄 Swap Batting Order (${escapeHTML(inn1?.bowling === src.a ? teamAName : teamBName)} bats first)</option>
+          <option value="same">Same Batting Order (${escapeHTML(inn1?.batting === src.a ? teamAName : teamBName)} bats first)</option>
+          <option value="random">🎲 Random Coin Flip</option>
+        </select>
+      </div>
+    </div>
+  `;
+
+  openModal('🔁 1-Tap Rematch Launcher', html, async () => {
+    const newTitle = (document.getElementById('rematchTitleInput')?.value || '').trim() || 'Rematch';
+    const orderChoice = document.getElementById('rematchBatFirstSel')?.value || 'swap';
+
+    const origBat = inn1?.batting || src.a;
+    const origBowl = inn1?.bowling || src.b;
+    let newBat = origBowl;
+    let newBowl = origBat;
+
+    if (orderChoice === 'same') {
+      newBat = origBat;
+      newBowl = origBowl;
+    } else if (orderChoice === 'random' && Math.random() < 0.5) {
+      newBat = origBat;
+      newBowl = origBowl;
+    }
+
+    const origBatSquad = JSON.parse(JSON.stringify(inn1?.squad || []));
+    const origBowlSquad = JSON.parse(JSON.stringify(inn1?.bowlingSquad || []));
+    const sameOrder = newBat === origBat;
+    const nextBatSquad = sameOrder ? origBatSquad : origBowlSquad;
+    const nextBowlSquad = sameOrder ? origBowlSquad : origBatSquad;
+
+    const clonedMatch = {
+      id: generateId(),
+      title: newTitle,
+      series: src.series || '',
+      format: src.format || 'T20',
+      fixtureType: src.fixtureType || 'squad',
+      a: src.a,
+      b: src.b,
+      overs: src.overs || 20,
+      date: new Date().toISOString().slice(0, 10),
+      venue: src.venue || 'Ground',
+      tossWinner: newBat,
+      tossDecision: 'bat',
+      pitchCondition: src.pitchCondition || 'Flat Batting Track',
+      handoverPin: String(Math.floor(1000 + Math.random() * 9000)),
+      status: 'Live',
+      innings: [{
+        inningsNum: 1,
+        batting: newBat,
+        bowling: newBowl,
+        squad: nextBatSquad,
+        bowlingSquad: nextBowlSquad,
+        strikerId: nextBatSquad[0]?.id || null,
+        nonStrikerId: nextBatSquad[1]?.id || null,
+        bowlerId: nextBowlSquad[0]?.id || null,
+        balls: [],
+        base: { runs: 0, wickets: 0, legal: 0, ballCount: 0 }
+      }],
+      created: new Date().toISOString()
+    };
+
+    await dbPut('matches', clonedMatch);
+    activeMatch = clonedMatch;
+    triggerAutoBackup();
+    queueCloudMatchSync(clonedMatch);
+    showToast('🔁 Rematch started! Squads loaded and ready.');
+    navigate('live-scorer');
+    return true;
+  });
+}
+
+// ==========================================
+// OVER-BY-OVER SUMMARY & PHASE-WISE SPLITS
+// ==========================================
+function buildInningsOverAndPhaseSummaryHTML(inn, totalMatchOvers) {
+  const balls = inn?.balls || [];
+  if (!balls.length) return '';
+
+  const ppEnd = Math.max(1, Math.round(totalMatchOvers * 0.3));
+  const deathStart = Math.max(ppEnd + 1, Math.floor(totalMatchOvers * 0.75) + 1);
+
+  const phases = {
+    pp: { label: `Powerplay (1–${ppEnd})`, runs: 0, wkts: 0, legal: 0 },
+    mid: { label: `Middle (${ppEnd + 1}–${Math.max(ppEnd + 1, deathStart - 1)})`, runs: 0, wkts: 0, legal: 0 },
+    death: { label: `Death (${deathStart}–${totalMatchOvers})`, runs: 0, wkts: 0, legal: 0 }
+  };
+
+  const oversMap = [];
+  let legalCount = 0;
+
+  balls.forEach(b => {
+    const isLegal = b.extraType !== 'wide' && b.extraType !== 'noBall' && b.extraType !== 'penalty';
+    const ovIdx = Math.floor(legalCount / 6);
+    const ovNum = ovIdx + 1;
+    if (!oversMap[ovIdx]) {
+      oversMap[ovIdx] = { ovNum, runs: 0, wkts: 0, badges: [] };
+    }
+
+    const r = (b.batRuns || 0) + (b.extraRuns || 0);
+    oversMap[ovIdx].runs += r;
+    if (b.wicket && b.dismissal !== 'retiredHurt') oversMap[ovIdx].wkts += 1;
+
+    const lbl = b.wicket ? 'W' : b.extraType ? `${b.extraType.slice(0, 2).toUpperCase()}${r > 1 ? '+' + (r - 1) : ''}` : (r === 0 ? '·' : String(r));
+    const cls = b.wicket ? 'wkt' : (b.batRuns === 4 || b.batRuns === 6) ? 'bnd' : '';
+    oversMap[ovIdx].badges.push({ lbl, cls });
+
+    const pBucket = ovNum <= ppEnd ? phases.pp : ovNum >= deathStart ? phases.death : phases.mid;
+    pBucket.runs += r;
+    if (b.wicket && b.dismissal !== 'retiredHurt') pBucket.wkts += 1;
+    if (isLegal) pBucket.legal += 1;
+
+    if (isLegal) legalCount += 1;
+  });
+
+  const validOvers = oversMap.filter(Boolean);
+
+  return `
+    <div style="margin-top:12px; padding-top:10px; border-top:1px dashed var(--border);">
+      <h4 style="font-size:11px; text-transform:uppercase; color:var(--text-muted); margin-bottom:4px;">Phase-Wise Breakdown</h4>
+      <div class="phase-splits-grid">
+        ${[phases.pp, phases.mid, phases.death].map(ph => {
+          const rr = ph.legal > 0 ? (ph.runs / (ph.legal / 6)).toFixed(1) : '0.0';
+          return `
+            <div class="phase-split-card">
+              <div class="muted" style="font-size:9.5px; font-weight:800;">${ph.label}</div>
+              <strong>${ph.runs}/${ph.wkts}</strong>
+              <div class="muted" style="font-size:9.5px;">RR ${rr}</div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+
+      <h4 style="font-size:11px; text-transform:uppercase; color:var(--text-muted); margin:8px 0 4px;">Over-by-Over Tally (${validOvers.length} Overs)</h4>
+      <div class="over-by-over-scroll">
+        ${validOvers.map(ov => {
+          const cardCls = ov.wkts > 0 ? 'wicket-over' : ov.runs >= 12 ? 'big-over' : '';
+          return `
+            <div class="obo-card ${cardCls}">
+              <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; font-weight:900;">
+                <span>Ov ${ov.ovNum}</span>
+                <span style="color:var(--primary);">${ov.runs}r${ov.wkts ? ` · ${ov.wkts}w` : ''}</span>
+              </div>
+              <div class="obo-balls-mini">
+                ${ov.badges.map(bg => `<span class="obo-ball-dot ${bg.cls}">${bg.lbl}</span>`).join('')}
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+// ==========================================
+// OFFLINE SYNC QUEUE INSPECTOR & BACKUP REMINDER
+// ==========================================
+async function openSyncQueueInspectorModal() {
+  const queue = typeof getCloudSyncQueue === 'function' ? await getCloudSyncQueue() : [];
+  const onlineStr = navigator.onLine ? '🟢 Online' : '🟠 Offline (Saved in IndexedDB)';
+  const cloudStr = currentCloudUser ? `Signed in as ${escapeHTML(currentCloudProfile?.display_name || currentCloudUser.email || 'Scorer')}` : 'Guest Mode (Local Storage Only)';
+
+  const html = `
+    <div>
+      <div class="card" style="margin-bottom:10px; padding:11px 12px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+          <strong style="font-size:13px;">Connection Status</strong>
+          <span style="font-size:11.5px; font-weight:900;">${onlineStr}</span>
+        </div>
+        <div class="muted" style="font-size:11.5px;">${cloudStr}</div>
+        <div style="margin-top:6px; font-size:12px; font-weight:800; color:var(--primary);">
+          Pending Cloud Queue: ${queue.length} item${queue.length === 1 ? '' : 's'}
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+        ${currentCloudUser
+          ? `<button type="button" class="btn btn-primary" onclick="closeModal(); flushCloudSyncQueue(false); syncAllLocalDataToCloud(false);">↻ Sync Now</button>`
+          : `<button type="button" class="btn btn-primary" onclick="closeModal(); openCloudAuthModal();">☁️ Sign In to Sync</button>`}
+        <button type="button" class="btn btn-secondary" onclick="markJsonBackupExported(); exportFullDatabaseJSON();">⬇️ Export JSON</button>
+      </div>
+    </div>
+  `;
+  openModal('☁️ Sync Queue & Offline Backup', html, null, false);
+}
+
+function markJsonBackupExported() {
+  dbGetAll('matches').then(all => {
+    try {
+      localStorage.setItem(LAST_JSON_EXPORT_KEY, String(all.length));
+    } catch (e) {}
+    const bar = document.getElementById('backupReminderBar');
+    if (bar) bar.style.display = 'none';
+  }).catch(() => {});
+}
+
+async function checkAndRenderBackupReminderBanner() {
+  const bar = document.getElementById('backupReminderBar');
+  if (!bar || !db) return;
+  try {
+    const matches = await dbGetAll('matches');
+    const lastExportCount = parseInt(localStorage.getItem(LAST_JSON_EXPORT_KEY) || '0', 10) || 0;
+    const delta = matches.length - lastExportCount;
+    if (matches.length >= 3 && delta >= 3) {
+      bar.style.display = 'flex';
+      bar.innerHTML = `
+        <span>💾 <strong>${delta} new match${delta === 1 ? '' : 'es'}</strong> recorded since your last JSON backup.</span>
+        <button type="button" class="btn btn-primary" style="padding:5px 10px; font-size:11px; white-space:nowrap;" onclick="markJsonBackupExported(); exportFullDatabaseJSON();">⬇️ Export Backup</button>
+      `;
+    } else {
+      bar.style.display = 'none';
+    }
+  } catch (e) {}
 }

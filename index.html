@@ -102,6 +102,7 @@
   <main id="mainApp">
     <!-- VIEW 1: MODERN HOME DASHBOARD -->
     <section id="dashboard" class="page active">
+      <div id="backupReminderBar" class="backup-reminder-bar" style="display:none;"></div>
       <!-- Stadium Branded Home Logo Header Card -->
       <div class="home-welcome-banner home-logo-header-card">
         <div class="home-card-animated-bg" aria-hidden="true">
@@ -387,6 +388,7 @@
                 <h3>Squad & Lineup Selection</h3>
                 <p class="muted">Select at least 2 players for each team. Pick who's playing without team restrictions.</p>
               </div>
+              <div class="squad-presets-toolbar" id="squadPresetsToolbar"></div>
               <div class="squad-search-wrap">
                 <input type="text" id="squadSearchInput" placeholder="Filter players by name or role..." oninput="filterSquadLists(this.value)">
               </div>

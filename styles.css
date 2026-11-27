@@ -4943,3 +4943,124 @@ body[data-theme="light"] .rsvp-pill.out.active { background: #fee2e2; color: #b9
   background: var(--primary-glow);
   color: var(--primary);
 }
+
+
+/* ==========================================
+   V2.40 1-TAP REMATCH, SQUAD PRESETS, OVER-BY-OVER & SYNC QUEUE INSPECTOR
+   ========================================== */
+
+.squad-presets-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.preset-chip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(16, 185, 129, 0.38);
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--text-main);
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.preset-chip-btn:hover {
+  border-color: var(--primary);
+  background: var(--primary-glow);
+}
+
+.phase-splits-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.phase-split-card {
+  padding: 8px 9px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  text-align: center;
+}
+
+.phase-split-card strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 950;
+  color: var(--primary);
+  margin: 2px 0;
+}
+
+.over-by-over-scroll {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 0 8px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.obo-card {
+  flex: 0 0 148px;
+  padding: 8px 9px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+}
+
+.obo-card.big-over {
+  border-color: rgba(16, 185, 129, 0.5);
+}
+
+.obo-card.wicket-over {
+  border-color: rgba(244, 63, 94, 0.5);
+}
+
+.obo-balls-mini {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 5px;
+}
+
+.obo-ball-dot {
+  font-size: 9.5px;
+  font-weight: 900;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+body[data-theme="light"] .obo-ball-dot {
+  background: rgba(15, 23, 42, 0.08);
+}
+
+.obo-ball-dot.wkt {
+  background: rgba(244, 63, 94, 0.22);
+  color: #f43f5e;
+}
+
+.obo-ball-dot.bnd {
+  background: rgba(0, 230, 118, 0.22);
+  color: var(--primary);
+}
+
+.backup-reminder-bar {
+  margin-bottom: 12px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.42);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11.5px;
+}
