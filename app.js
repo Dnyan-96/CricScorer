@@ -2336,6 +2336,15 @@ function playNextBroadcastFx() {
         <div class="fx-sub-detail">${escapeHTML(ev.bowlerName || 'Bowler')} · ${escapeHTML(ev.victimsText || '3 Consecutive Wickets')}</div>
         <div class="fx-badge-pill">3 WICKETS IN 3 LEGAL BALLS</div>
       </div>`;
+  } else if (ev.type === 'INNINGS_BREAK') {
+    cardHTML = `
+      <div class="fx-card-shell fx-innings-break">
+        ${buildFxParticlesHTML(['#38bdf8', '#34d399', '#fbbf24', '#ffffff'])}
+        <div class="fx-kicker">INNINGS BREAK · TARGET SET</div>
+        <div class="fx-big-title" style="font-size:24px;">🎯 TARGET: ${ev.target} RUNS</div>
+        <div class="fx-sub-detail">${escapeHTML(ev.chasingTeam || 'Chasing Team')} need ${ev.target} in ${ev.overs} overs (RRR ${ev.rrr})</div>
+        <div class="fx-badge-pill">2ND INNINGS UNDERWAY</div>
+      </div>`;
   } else if (ev.type === 'ALL_OUT') {
     cardHTML = `
       <div class="fx-card-shell fx-all-out">
@@ -3166,6 +3175,17 @@ async function endInningsPrompt(isDeclaration = false, skipConfirm = false) {
     activeMatch.innings.push(innings2);
     await saveActiveMatch();
     showToast(`Innings 1 finished! Target: ${activeMatch.target} runs.`);
+    dbGetAll('teams').then(allT => {
+      const chasingName = allT.find(t => t.id === innings2.batting)?.name || 'Chasing Team';
+      const reqRr = (activeMatch.target / Math.max(1, activeMatch.overs || 20)).toFixed(2);
+      queueBroadcastFx({
+        type: 'INNINGS_BREAK',
+        target: activeMatch.target,
+        chasingTeam: chasingName,
+        overs: activeMatch.overs || 20,
+        rrr: reqRr
+      });
+    }).catch(() => {});
     renderLiveScorerView();
   } else {
     finishMatchPrompt(true);
@@ -3344,7 +3364,7 @@ function buildMatchChartsSVG(m, teams) {
     if (o1) {
       const h1 = (o1.runs / maxOverRuns) * plotH;
       const y1 = 10 + plotH - h1;
-      barsSVG += `<rect x="${xBase + 1}" y="${y1.toFixed(1)}" width="${barW.toFixed(1)}" height="${h1.toFixed(1)}" fill="var(--primary)" rx="2" />`;
+      barsSVG += `<rect class="manhattan-bar-anim" style="animation-delay:${Math.min(i * 25, 450)}ms; cursor:pointer;" onclick="inspectChartOverDetail('${escapeHTML(t1Name)}', ${i + 1}, ${o1.runs}, ${o1.wickets})" x="${xBase + 1}" y="${y1.toFixed(1)}" width="${barW.toFixed(1)}" height="${h1.toFixed(1)}" fill="var(--primary)" rx="2" />`;
       if (o1.wickets > 0) {
         barsSVG += `<circle cx="${(xBase + 1 + barW / 2).toFixed(1)}" cy="${Math.max(5, y1 - 4).toFixed(1)}" r="3" fill="var(--danger)" />`;
       }
@@ -3352,7 +3372,7 @@ function buildMatchChartsSVG(m, teams) {
     if (o2) {
       const h2 = (o2.runs / maxOverRuns) * plotH;
       const y2 = 10 + plotH - h2;
-      barsSVG += `<rect x="${(xBase + 2 + barW).toFixed(1)}" y="${y2.toFixed(1)}" width="${barW.toFixed(1)}" height="${h2.toFixed(1)}" fill="var(--accent)" rx="2" />`;
+      barsSVG += `<rect class="manhattan-bar-anim" style="animation-delay:${Math.min(i * 25 + 40, 490)}ms; cursor:pointer;" onclick="inspectChartOverDetail('${escapeHTML(t2Name)}', ${i + 1}, ${o2.runs}, ${o2.wickets})" x="${(xBase + 2 + barW).toFixed(1)}" y="${y2.toFixed(1)}" width="${barW.toFixed(1)}" height="${h2.toFixed(1)}" fill="var(--accent)" rx="2" />`;
       if (o2.wickets > 0) {
         barsSVG += `<circle cx="${(xBase + 2 + barW * 1.5).toFixed(1)}" cy="${Math.max(5, y2 - 4).toFixed(1)}" r="3" fill="var(--danger)" />`;
       }
@@ -3377,7 +3397,7 @@ function buildMatchChartsSVG(m, teams) {
   return `
     <div class="chart-box">
       <div class="chart-header">
-        <span>📊 Manhattan (Runs / Over)</span>
+        <span>📊 Manhattan <small id="chartOverInspectReadout" style="color:var(--primary); font-weight:800;">(Tap bar)</small></span>
         <div class="chart-legend">
           <span><span class="legend-dot" style="background:var(--primary);"></span>${escapeHTML(t1Name)}</span>
           ${ov2.length ? `<span><span class="legend-dot" style="background:var(--accent);"></span>${escapeHTML(t2Name)}</span>` : ''}
@@ -3536,13 +3556,13 @@ async function viewDetailedScorecard(matchId) {
           : 'None';
 
         return `
-          <div style="margin-bottom:18px; background:var(--bg-surface-alt); padding:12px; border-radius:12px; border:1px solid var(--border);">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <div class="sc-innings-accordion" id="scInningsAcc_${idx}">
+            <button type="button" class="sc-innings-acc-header" onclick="toggleScorecardInningsAccordion('scInningsAcc_${idx}')">
               <strong style="font-size:14px;">${escapeHTML(battingName)} ${inn.declared ? '<small class="muted">(dec)</small>' : ''}</strong>
-              <span style="font-size:15px; font-weight:900; color:var(--primary);">${stats.totalRuns}/${stats.wickets} <small style="font-weight:600; color:var(--text-muted);">(${stats.oversFormatted} ov)</small></span>
-            </div>
-
-            <h4 style="font-size:11px; text-transform:uppercase; color:var(--text-muted); margin-bottom:4px;">Batting</h4>
+              <span style="font-size:14.5px; font-weight:900; color:var(--primary);">${stats.totalRuns}/${stats.wickets} <small style="font-weight:600; color:var(--text-muted);">(${stats.oversFormatted} ov)</small><span class="sc-acc-chevron">▾</span></span>
+            </button>
+            <div class="sc-innings-acc-body">
+            <h4 style="font-size:11px; text-transform:uppercase; color:var(--text-muted); margin:10px 0 4px;">Batting</h4>
             <table class="crease-table">
               <thead>
                 <tr>
@@ -3617,6 +3637,7 @@ async function viewDetailedScorecard(matchId) {
 
             ${buildBowlerSpellBreakdownHTML(inn)}
             ${buildInningsOverAndPhaseSummaryHTML(inn, m.overs || 20)}
+            </div>
           </div>
         `;
       }).join('')}
@@ -5155,6 +5176,7 @@ function buildTournamentLeaderboardHTML(subTab, standings, caps, fixtures, teams
 
   return `
     ${knockoutBarHTML}
+    ${buildTournamentKnockoutBracketHTML(fixtures, teamsMap, allMatches)}
     <div class="section-title-row">
       <h2>📊 Points Table &amp; NRR</h2>
       <span class="muted" style="font-size:11px;">Win = 2 pts · Tie = 1 pt</span>
@@ -5166,7 +5188,7 @@ function buildTournamentLeaderboardHTML(subTab, standings, caps, fixtures, teams
         </thead>
         <tbody>
           ${standings.map((row, idx) => `
-            <tr>
+            <tr class="stagger-row-anim" style="animation-delay:${Math.min(idx * 45, 360)}ms;">
               <td><strong>${idx + 1}</strong></td>
               <td><strong>${escapeHTML(row.teamName)}</strong>${idx < 4 && standings.length >= 4 ? ' <small style="color:var(--primary); font-weight:900;">Q</small>' : ''}</td>
               <td>${row.played}</td>
@@ -5369,7 +5391,8 @@ async function renderTournamentsView() {
           <p class="muted" style="font-size:12px; margin:0;">${(activeTourn.teamIds || []).length} Teams · ${completedCount}/${totalFixtures} Matches Played · ${activeTourn.overs || 20} Overs/side</p>
         </div>
         <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
-          <button type="button" class="btn btn-primary" style="padding:6px 10px; font-size:11px;" onclick="sharePublicTournamentLink('${activeTourn.id}')">📤 Share Hub</button>
+          <button type="button" class="btn btn-primary" style="padding:6px 10px; font-size:11px;" onclick="openTournamentChampionsPosterModal('${activeTourn.id}')">🏆 Poster</button>
+          <button type="button" class="btn btn-secondary" style="padding:6px 10px; font-size:11px;" onclick="sharePublicTournamentLink('${activeTourn.id}')">📤 Share</button>
           <button type="button" class="btn btn-secondary" style="padding:6px 10px; font-size:11px;" onclick="openAddTeamToTournamentModal('${activeTourn.id}')">＋ Team</button>
           <button type="button" class="btn btn-secondary" style="padding:6px 10px; font-size:11px; color:var(--danger);" onclick="deleteTournamentPrompt('${activeTourn.id}')">🗑️</button>
         </div>
@@ -7219,6 +7242,19 @@ async function assignShotZoneToBall(ballId, zoneId) {
   closeModal();
 }
 
+function filterScorecardWagonWheel(mode) {
+  const box = document.getElementById('scorecardWagonWheelCard');
+  if (!box) return;
+  box.querySelectorAll('.ww-filter-pill').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-ww-filter') === mode);
+  });
+  box.querySelectorAll('[data-ww-runs]').forEach(el => {
+    const runsVal = el.getAttribute('data-ww-runs');
+    const show = mode === 'all' || runsVal === mode;
+    el.style.display = show ? '' : 'none';
+  });
+}
+
 function buildMatchWagonWheelSVG(matchObj) {
   if (!matchObj || !Array.isArray(matchObj.innings)) return '';
   const zonedBalls = [];
@@ -7239,8 +7275,12 @@ function buildMatchWagonWheelSVG(matchObj) {
   const innerRingStroke = isLight ? 'rgba(22,101,52,0.4)' : 'rgba(255,255,255,0.14)';
 
   const zoneCounts = {};
+  let foursCount = 0;
+  let sixesCount = 0;
   zonedBalls.forEach(b => {
     zoneCounts[b.shotZone] = (zoneCounts[b.shotZone] || 0) + b.batRuns;
+    if (b.batRuns === 4) foursCount += 1;
+    if (b.batRuns === 6) sixesCount += 1;
   });
   const topZoneId = Object.keys(zoneCounts).sort((a, b) => zoneCounts[b] - zoneCounts[a])[0];
   const topZoneLabel = WAGON_WHEEL_ZONES.find(z => z.id === topZoneId)?.label || topZoneId;
@@ -7254,14 +7294,22 @@ function buildMatchWagonWheelSVG(matchObj) {
     const x2 = (110 + Math.cos(rad) * len).toFixed(1);
     const y2 = (110 + Math.sin(rad) * len).toFixed(1);
     const stroke = b.batRuns === 6 ? sixColor : fourColor;
-    return `<line x1="110" y1="110" x2="${x2}" y2="${y2}" stroke="${stroke}" stroke-width="2.6" stroke-linecap="round" opacity="0.92" />
-            <circle cx="${x2}" cy="${y2}" r="3.4" fill="${stroke}" />`;
+    const delayMs = Math.min(idx * 45, 540);
+    return `<g data-ww-runs="${b.batRuns}">
+      <line class="wagon-ray-animated" style="animation-delay:${delayMs}ms;" x1="110" y1="110" x2="${x2}" y2="${y2}" stroke="${stroke}" stroke-width="2.6" stroke-linecap="round" />
+      <circle cx="${x2}" cy="${y2}" r="3.4" fill="${stroke}" />
+    </g>`;
   }).join('');
 
   return `
-    <div class="card" style="margin-top:12px; padding:12px; text-align:center;">
+    <div id="scorecardWagonWheelCard" class="card" style="margin-top:12px; padding:12px; text-align:center;">
       <div class="eyebrow" style="margin-bottom:4px;">🎯 BOUNDARY WAGON WHEEL (${zonedBalls.length} TAGGED SHOTS)</div>
       <div style="font-size:12px; font-weight:800; color:var(--primary); margin-bottom:8px;">Strongest Zone: ${escapeHTML(topZoneLabel)} (${zoneCounts[topZoneId]} runs)</div>
+      <div class="ww-filter-pills">
+        <button type="button" class="ww-filter-pill active" data-ww-filter="all" onclick="filterScorecardWagonWheel('all')">All (${zonedBalls.length})</button>
+        <button type="button" class="ww-filter-pill" data-ww-filter="4" onclick="filterScorecardWagonWheel('4')">4s Only (${foursCount})</button>
+        <button type="button" class="ww-filter-pill" data-ww-filter="6" onclick="filterScorecardWagonWheel('6')">6s Only (${sixesCount})</button>
+      </div>
       <svg viewBox="0 0 220 220" width="210" height="210" style="max-width:100%; display:block; margin:0 auto;">
         <circle cx="110" cy="110" r="98" fill="${fieldFill}" stroke="${fieldStroke}" stroke-width="2.2" />
         <circle cx="110" cy="110" r="54" fill="none" stroke="${innerRingStroke}" stroke-width="1.2" stroke-dasharray="4 3" />
@@ -9129,4 +9177,228 @@ async function printOfficialMatchSheet(matchId) {
       document.body.classList.remove('printing-official-sheet');
     }, 500);
   }, 100);
+}
+
+
+// ==========================================
+// V2.42: KNOCKOUT BRACKET TREE, 1080x1080 CHAMPIONS POSTER & SCORECARD HELPERS
+// ==========================================
+function toggleScorecardInningsAccordion(accId) {
+  const el = document.getElementById(accId);
+  if (el) el.classList.toggle('collapsed');
+}
+
+function inspectChartOverDetail(teamName, ovNum, runs, wkts) {
+  const el = document.getElementById('chartOverInspectReadout');
+  if (el) {
+    el.textContent = `· ${teamName} Ov ${ovNum}: ${runs}r${wkts ? `, ${wkts}w` : ''}`;
+  }
+}
+
+function buildTournamentKnockoutBracketHTML(fixtures, teamsMap, allMatches) {
+  if (!Array.isArray(fixtures) || !fixtures.length) return '';
+  const semis = fixtures.filter(f => (f.roundLabel || '').toLowerCase().includes('semi-final'));
+  const finals = fixtures.filter(f => (f.roundLabel || '').toLowerCase().includes('grand final') || (f.roundLabel || '').toLowerCase() === 'final');
+  if (!semis.length && !finals.length) return '';
+
+  const resolveFixtureWinner = (fx) => {
+    if (!fx) return null;
+    if (fx.winnerId) return fx.winnerId;
+    if (fx.matchId) {
+      const m = (allMatches || []).find(x => x.id === fx.matchId);
+      if (m && m.status === 'Completed' && m.result) {
+        const tA = (teamsMap[fx.teamAId] || '').toLowerCase();
+        const tB = (teamsMap[fx.teamBId] || '').toLowerCase();
+        const res = m.result.toLowerCase();
+        if (tA && res.startsWith(tA)) return fx.teamAId;
+        if (tB && res.startsWith(tB)) return fx.teamBId;
+      }
+    }
+    return null;
+  };
+
+  const sf1 = semis[0] || { roundLabel: 'Semi-Final 1', teamAId: null, teamBId: null };
+  const sf2 = semis[1] || { roundLabel: 'Semi-Final 2', teamAId: null, teamBId: null };
+  const gf = finals[0] || {
+    roundLabel: 'Grand Final',
+    teamAId: resolveFixtureWinner(sf1),
+    teamBId: resolveFixtureWinner(sf2)
+  };
+
+  const renderSlot = (teamId, winnerId, fallbackText = 'TBD') => {
+    const name = teamId ? (teamsMap[teamId] || 'Team') : fallbackText;
+    const isWin = teamId && winnerId && teamId === winnerId;
+    return `
+      <div class="kb-team-slot ${isWin ? 'winner' : ''}">
+        <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHTML(name)}</span>
+        ${isWin ? '<span>✓</span>' : ''}
+      </div>
+    `;
+  };
+
+  const sf1Win = resolveFixtureWinner(sf1);
+  const sf2Win = resolveFixtureWinner(sf2);
+  const gfWin = resolveFixtureWinner(gf);
+  const championName = gfWin ? (teamsMap[gfWin] || 'Champion') : '';
+
+  return `
+    <div class="knockout-bracket-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <span class="eyebrow" style="margin:0; color:var(--primary);">🏆 KNOCKOUT BRACKET TREE</span>
+        ${championName ? `<span class="badge badge-completed">👑 ${escapeHTML(championName)}</span>` : '<span class="muted" style="font-size:10.5px;">Road to Final</span>'}
+      </div>
+      <div class="kb-tree-scroll">
+        <div class="kb-col">
+          <div class="kb-match-box">
+            <div class="kb-round-tag">${escapeHTML(sf1.roundLabel || 'Semi-Final 1')}</div>
+            ${renderSlot(sf1.teamAId, sf1Win, 'Seed #1')}
+            ${renderSlot(sf1.teamBId, sf1Win, 'Seed #4')}
+          </div>
+          <div class="kb-match-box">
+            <div class="kb-round-tag">${escapeHTML(sf2.roundLabel || 'Semi-Final 2')}</div>
+            ${renderSlot(sf2.teamAId, sf2Win, 'Seed #2')}
+            ${renderSlot(sf2.teamBId, sf2Win, 'Seed #3')}
+          </div>
+        </div>
+
+        <svg class="kb-connector-svg" viewBox="0 0 26 132" fill="none" aria-hidden="true">
+          <path d="M 0 32 H 13 V 66 H 26 M 0 100 H 13 V 66" stroke="rgba(16, 185, 129, 0.55)" stroke-width="2" />
+        </svg>
+
+        <div class="kb-col">
+          <div class="kb-match-box final-box">
+            <div class="kb-round-tag" style="color:#fbbf24;">👑 ${escapeHTML(gf.roundLabel || 'Grand Final')}</div>
+            ${renderSlot(gf.teamAId, gfWin, 'SF1 Winner')}
+            ${renderSlot(gf.teamBId, gfWin, 'SF2 Winner')}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function openTournamentChampionsPosterModal(tournId) {
+  const [tournaments, teams, allMatches] = await Promise.all([
+    getAllTournaments(),
+    dbGetAll('teams'),
+    dbGetAll('matches')
+  ]);
+  const tourn = tournaments.find(t => t.id === tournId);
+  if (!tourn) return;
+
+  const teamsMap = {};
+  teams.forEach(t => { teamsMap[t.id] = t.name; });
+  const standings = computeTournamentStandings(tourn, teamsMap, allMatches);
+  const caps = computeTournamentPlayerCaps(tourn, teamsMap, allMatches);
+
+  // Resolve champion from Grand Final winner or #1 in standings
+  const gf = (tourn.fixtures || []).find(f => (f.roundLabel || '').toLowerCase().includes('final'));
+  let champTeamName = standings[0]?.teamName || 'Tournament Champion';
+  if (gf && gf.matchId) {
+    const fm = allMatches.find(m => m.id === gf.matchId);
+    if (fm && fm.status === 'Completed' && fm.result) {
+      const tA = teamsMap[gf.teamAId] || '';
+      const tB = teamsMap[gf.teamBId] || '';
+      if (tA && fm.result.toLowerCase().startsWith(tA.toLowerCase())) champTeamName = tA;
+      else if (tB && fm.result.toLowerCase().startsWith(tB.toLowerCase())) champTeamName = tB;
+    }
+  }
+
+  const orange = caps.orangeList[0];
+  const purple = caps.purpleList[0];
+  const mvp = caps.mvpList[0];
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 1080;
+  canvas.height = 1080;
+  const ctx = canvas.getContext('2d');
+
+  const grad = ctx.createLinearGradient(0, 0, 1080, 1080);
+  grad.addColorStop(0, '#04120d');
+  grad.addColorStop(0.55, '#0b2b20');
+  grad.addColorStop(1, '#1e1b08');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 1080, 1080);
+
+  ctx.strokeStyle = 'rgba(250, 204, 21, 0.55)';
+  ctx.lineWidth = 7;
+  ctx.strokeRect(36, 36, 1008, 1008);
+
+  ctx.fillStyle = '#00e676';
+  ctx.font = '900 26px system-ui, sans-serif';
+  ctx.fillText('OFFICIAL TOURNAMENT HONOURS', 84, 108);
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '900 54px system-ui, sans-serif';
+  ctx.fillText(tourn.name.toUpperCase().slice(0, 24), 84, 174);
+
+  // Champion Trophy Banner
+  ctx.fillStyle = 'rgba(250, 204, 21, 0.14)';
+  ctx.fillRect(84, 215, 912, 185);
+  ctx.strokeStyle = 'rgba(250, 204, 21, 0.6)';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(84, 215, 912, 185);
+
+  ctx.fillStyle = '#facc15';
+  ctx.font = '900 24px system-ui, sans-serif';
+  ctx.fillText('🏆 TOURNAMENT CHAMPIONS', 116, 266);
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '900 56px system-ui, sans-serif';
+  ctx.fillText(champTeamName.toUpperCase().slice(0, 22), 116, 344);
+
+  const awards = [
+    {
+      tag: '🧢 ORANGE CAP · TOP RUN-SCORER',
+      color: '#fb923c',
+      name: orange ? orange.name : 'TBD',
+      stat: orange ? `${orange.runs} Runs (${orange.innings} inn · SR ${orange.sr})` : 'No innings recorded'
+    },
+    {
+      tag: '🟣 PURPLE CAP · TOP WICKET-TAKER',
+      color: '#c084fc',
+      name: purple ? purple.name : 'TBD',
+      stat: purple ? `${purple.wickets} Wickets (Best ${purple.bestFig} · Econ ${purple.econ})` : 'No wickets recorded'
+    },
+    {
+      tag: '🌟 PLAYER OF THE TOURNAMENT (MVP)',
+      color: '#00e676',
+      name: mvp ? mvp.name : 'TBD',
+      stat: mvp ? `${mvp.pts} Impact Pts (${mvp.runs}r · ${mvp.wickets}w)` : 'No points recorded'
+    }
+  ];
+
+  awards.forEach((aw, idx) => {
+    const y = 436 + idx * 172;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.fillRect(84, y, 912, 146);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.14)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(84, y, 912, 146);
+
+    ctx.fillStyle = aw.color;
+    ctx.font = '900 22px system-ui, sans-serif';
+    ctx.fillText(aw.tag, 114, y + 42);
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = '900 38px system-ui, sans-serif';
+    ctx.fillText(aw.name.slice(0, 26), 114, y + 92);
+
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '700 24px system-ui, sans-serif';
+    ctx.fillText(aw.stat, 114, y + 128);
+  });
+
+  ctx.fillStyle = '#64748b';
+  ctx.font = '700 24px system-ui, sans-serif';
+  ctx.fillText('Generated with CricScorer · Tournament & Live Cricket Hub', 84, 1004);
+
+  const dataUrl = canvas.toDataURL('image/png');
+  const html = `
+    <div style="text-align:center;">
+      <img src="${dataUrl}" alt="${escapeHTML(tourn.name)} Champions Poster" style="width:100%; max-width:340px; border-radius:14px; border:1px solid var(--border); margin-bottom:10px;" />
+      <a href="${dataUrl}" download="${escapeHTML(tourn.name.replace(/\s+/g, '_'))}_Champions_Poster.png" class="btn btn-primary" style="display:inline-block; text-decoration:none; width:100%;">⬇️ Download 1080×1080 Champions PNG</a>
+    </div>
+  `;
+  openModal(`🏆 ${tourn.name} — Champions Poster`, html, null, false);
 }

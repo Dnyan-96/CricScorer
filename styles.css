@@ -5232,3 +5232,223 @@ body[data-theme="light"] .spell-over-pill.wkt-over {
     margin-top: 24px;
   }
 }
+
+
+/* ==========================================
+   V2.42 KNOCKOUT BRACKET TREE, CHAMPIONS POSTER, COLLAPSIBLE SCORECARD & CHART ANIMATIONS
+   ========================================== */
+
+.knockout-bracket-card {
+  margin-bottom: 14px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  background: var(--bg-card);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.kb-tree-scroll {
+  display: grid;
+  grid-template-columns: minmax(145px, 1fr) 26px minmax(150px, 1fr);
+  align-items: center;
+  gap: 0;
+  min-width: 318px;
+}
+
+.kb-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.kb-match-box {
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface-alt);
+  padding: 7px 8px;
+}
+
+.kb-match-box.final-box {
+  border-color: rgba(245, 158, 11, 0.55);
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(16, 185, 129, 0.08));
+}
+
+.kb-round-tag {
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--primary);
+  margin-bottom: 4px;
+}
+
+.kb-team-slot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 750;
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.03);
+  margin-top: 3px;
+}
+
+body[data-theme="light"] .kb-team-slot {
+  background: rgba(15, 23, 42, 0.04);
+}
+
+.kb-team-slot.winner {
+  background: rgba(0, 230, 118, 0.16);
+  border: 1px solid rgba(0, 230, 118, 0.45);
+  color: var(--primary);
+  font-weight: 900;
+}
+
+body[data-theme="light"] .kb-team-slot.winner {
+  background: #dcfce7;
+  color: #047857;
+  border-color: #10b981;
+}
+
+.kb-connector-svg {
+  width: 26px;
+  height: 132px;
+  display: block;
+}
+
+/* Collapsible Innings Accordion inside Detailed Scorecard */
+.sc-innings-accordion {
+  margin-bottom: 14px;
+  background: var(--bg-surface-alt);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.sc-innings-acc-header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 12px;
+  background: transparent;
+  border: none;
+  color: var(--text-main);
+  cursor: pointer;
+  text-align: left;
+}
+
+.sc-innings-acc-body {
+  padding: 0 12px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.sc-innings-accordion.collapsed .sc-innings-acc-body {
+  display: none;
+}
+
+.sc-acc-chevron {
+  display: inline-block;
+  font-size: 11px;
+  margin-left: 5px;
+  transition: transform 0.2s ease;
+}
+
+.sc-innings-accordion.collapsed .sc-acc-chevron {
+  transform: rotate(-90deg);
+}
+
+/* Animated Wagon Wheel Ray Draw & Chart Reveal */
+@keyframes wagonRayDraw {
+  from {
+    stroke-dashoffset: 120;
+    opacity: 0.2;
+  }
+  to {
+    stroke-dashoffset: 0;
+    opacity: 0.94;
+  }
+}
+
+.wagon-ray-animated {
+  stroke-dasharray: 120;
+  stroke-dashoffset: 0;
+  animation: wagonRayDraw 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.ww-filter-pills {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+
+.ww-filter-pill {
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface-alt);
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.ww-filter-pill.active {
+  border-color: var(--primary);
+  background: var(--primary-glow);
+  color: var(--primary);
+}
+
+@keyframes chartBarRise {
+  from {
+    transform: scaleY(0.08);
+    opacity: 0.3;
+  }
+  to {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+.manhattan-bar-anim {
+  transform-box: fill-box;
+  transform-origin: bottom;
+  animation: chartBarRise 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes chaseTensionPulse {
+  0% { box-shadow: 0 0 0 rgba(239, 68, 68, 0.15); }
+  100% { box-shadow: 0 0 14px rgba(239, 68, 68, 0.45); }
+}
+
+.chase-pressure-box.high-tension {
+  border-color: rgba(239, 68, 68, 0.65) !important;
+  animation: chaseTensionPulse 1.1s infinite alternate;
+}
+
+.fx-innings-break {
+  background: linear-gradient(135deg, rgba(6, 78, 59, 0.96), rgba(3, 105, 161, 0.94));
+  border-color: #38bdf8;
+}
+
+@keyframes rowStaggerFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.stagger-row-anim {
+  animation: rowStaggerFadeIn 0.32s ease both;
+}

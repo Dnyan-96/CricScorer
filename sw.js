@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cricscorer-v2.41-hotfix';
+const CACHE_NAME = 'cricscorer-v2.42';
 const ASSETS = [
   './',
   './index.html',
