@@ -3483,18 +3483,18 @@ async function viewDetailedScorecard(matchId) {
 
   const html = `
     <div style="font-size:13px;">
-      <div style="margin-bottom:12px; border-bottom:1px solid var(--border); padding-bottom:10px; display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
-        <div>
-          <h3 style="font-size:16px; margin-bottom:2px;">${escapeHTML(m.title)} ${m.series ? `<span class="badge badge-completed" style="font-size:9px; vertical-align:middle;">${escapeHTML(m.series)}</span>` : ''}</h3>
-          <p class="muted">${escapeHTML(teamAName)} vs ${escapeHTML(teamBName)} · ${escapeHTML(m.venue || 'Venue')} · ${escapeHTML(m.date || '')}</p>
-          ${tossSummary ? `<p class="muted" style="font-size:11px; margin-top:3px;">🪙 ${tossSummary}</p>` : ''}
-          <p style="color:var(--primary); font-weight:800; margin-top:5px;">${escapeHTML(m.result || m.status)}</p>
+      <div style="margin-bottom:12px; border-bottom:1px solid var(--border); padding-bottom:10px;">
+        <div style="width:100%;">
+          <h3 style="font-size:16px; margin-bottom:3px; line-height:1.25;">${escapeHTML(m.title)} ${m.series ? `<span class="badge badge-completed" style="font-size:9px; vertical-align:middle;">${escapeHTML(m.series)}</span>` : ''}</h3>
+          <p class="muted" style="margin:0; line-height:1.35;">${escapeHTML(teamAName)} vs ${escapeHTML(teamBName)} · ${escapeHTML(m.venue || 'Venue')} · ${escapeHTML(m.date || '')}</p>
+          ${tossSummary ? `<p class="muted" style="font-size:11px; margin-top:4px; line-height:1.35;">🪙 ${tossSummary}</p>` : ''}
+          <p style="color:var(--primary); font-weight:800; margin-top:5px; line-height:1.35;">${escapeHTML(m.result || m.status)}</p>
         </div>
-        <div style="display:flex; gap:6px; flex-shrink:0; flex-wrap:wrap; justify-content:flex-end;">
-          <button type="button" class="btn btn-secondary" style="font-size:11px; padding:6px 9px; white-space:nowrap;" onclick="printOfficialMatchSheet('${m.id}')">🖨️ Print</button>
-          <button type="button" class="btn btn-secondary" style="font-size:11px; padding:6px 9px; white-space:nowrap;" onclick="openRematchClonerModal('${m.id}')">🔁 Rematch</button>
-          <button type="button" class="btn btn-secondary" style="font-size:11px; padding:6px 9px; white-space:nowrap;" onclick="openMatchPosterModal('${m.id}')">🖼️ Poster</button>
-          <button type="button" class="btn btn-primary" style="font-size:11px; padding:6px 9px; white-space:nowrap;" onclick="shareMatchSummaryText('${m.id}')">📲 Text</button>
+        <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; margin-top:10px; width:100%;">
+          <button type="button" class="btn btn-secondary" style="font-size:11px; padding:7px 4px; white-space:nowrap; width:100%;" onclick="printOfficialMatchSheet('${m.id}')">🖨️ Print</button>
+          <button type="button" class="btn btn-secondary" style="font-size:11px; padding:7px 4px; white-space:nowrap; width:100%;" onclick="openRematchClonerModal('${m.id}')">🔁 Rematch</button>
+          <button type="button" class="btn btn-secondary" style="font-size:11px; padding:7px 4px; white-space:nowrap; width:100%;" onclick="openMatchPosterModal('${m.id}')">🖼️ Poster</button>
+          <button type="button" class="btn btn-primary" style="font-size:11px; padding:7px 4px; white-space:nowrap; width:100%;" onclick="shareMatchSummaryText('${m.id}')">📲 Text</button>
         </div>
       </div>
 
